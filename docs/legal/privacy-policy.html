@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Política de Privacidade | Pablo Publisher</title>
+    <meta
+      name="description"
+      content="Política de privacidade do Pablo Publisher para autenticação, rascunhos locais e publicação no LinkedIn."
+    />
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f4efe7;
+        --bg-deep: #e7dccd;
+        --surface: rgba(255, 251, 246, 0.84);
+        --surface-strong: #fffaf4;
+        --text: #1f1b16;
+        --muted: #65594b;
+        --line: rgba(94, 71, 46, 0.16);
+        --accent: #8b5e34;
+        --accent-strong: #6f4520;
+        --shadow: 0 18px 60px rgba(53, 35, 16, 0.12);
+        --radius-xl: 28px;
+        --radius-lg: 20px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at top left, rgba(139, 94, 52, 0.14), transparent 30%),
+          radial-gradient(circle at 85% 10%, rgba(111, 69, 32, 0.12), transparent 22%),
+          linear-gradient(180deg, #fbf6f0 0%, var(--bg) 46%, var(--bg-deep) 100%);
+        color: var(--text);
+        font-family: "Avenir Next", "Segoe UI", sans-serif;
+      }
+
+      .shell {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 40px 20px 72px;
+      }
+
+      .hero {
+        position: relative;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-xl);
+        padding: 36px;
+        background: linear-gradient(135deg, rgba(255, 250, 244, 0.92), rgba(245, 234, 220, 0.86));
+        box-shadow: var(--shadow);
+      }
+
+      .hero::after {
+        content: "";
+        position: absolute;
+        right: -40px;
+        top: -48px;
+        width: 220px;
+        height: 220px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(139, 94, 52, 0.22), rgba(139, 94, 52, 0));
+        pointer-events: none;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 14px;
+        border-radius: 999px;
+        background: rgba(139, 94, 52, 0.08);
+        color: var(--accent-strong);
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2 {
+        font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+        letter-spacing: -0.02em;
+      }
+
+      h1 {
+        margin: 18px 0 10px;
+        font-size: clamp(2.5rem, 6vw, 4.3rem);
+        line-height: 0.95;
+      }
+
+      .lead {
+        max-width: 760px;
+        margin: 0;
+        color: var(--muted);
+        font-size: 1.08rem;
+        line-height: 1.7;
+      }
+
+      .meta {
+        margin-top: 24px;
+        color: var(--muted);
+        font-size: 0.94rem;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.75fr);
+        gap: 22px;
+        margin-top: 24px;
+      }
+
+      .panel,
+      .aside-card {
+        border: 1px solid var(--line);
+        border-radius: var(--radius-lg);
+        background: var(--surface);
+        backdrop-filter: blur(12px);
+        box-shadow: var(--shadow);
+      }
+
+      .panel {
+        padding: 12px;
+      }
+
+      .section {
+        padding: 24px;
+        border-radius: 16px;
+      }
+
+      .section + .section {
+        margin-top: 8px;
+        border-top: 1px solid rgba(94, 71, 46, 0.1);
+      }
+
+      h2 {
+        margin: 0 0 12px;
+        font-size: 1.45rem;
+      }
+
+      p,
+      li {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.75;
+      }
+
+      .section p + p,
+      .section p + ul,
+      .section ul + p {
+        margin-top: 12px;
+      }
+
+      ul {
+        padding-left: 18px;
+      }
+
+      li + li {
+        margin-top: 8px;
+      }
+
+      .aside {
+        display: grid;
+        gap: 18px;
+      }
+
+      .aside-card {
+        padding: 22px;
+      }
+
+      .aside-card h3 {
+        margin: 0 0 12px;
+        font-size: 0.92rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--accent-strong);
+      }
+
+      .aside-card strong {
+        display: block;
+        margin-bottom: 6px;
+        color: var(--text);
+        font-size: 1.05rem;
+      }
+
+      .tag-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 14px;
+      }
+
+      .tag {
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: rgba(139, 94, 52, 0.08);
+        color: var(--accent-strong);
+        font-size: 0.88rem;
+        font-weight: 600;
+      }
+
+      a {
+        color: var(--accent-strong);
+        text-decoration-thickness: 1px;
+        text-underline-offset: 2px;
+      }
+
+      footer {
+        margin-top: 22px;
+        padding: 18px 4px 0;
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
+
+      @media (max-width: 860px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+
+        .hero {
+          padding: 28px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <div class="eyebrow">Pablo Publisher</div>
+        <h1>Política de Privacidade</h1>
+        <p class="lead">
+          Este documento explica como o Pablo Publisher processa autenticação, rascunhos locais,
+          histórico de publicações e dados mínimos necessários para operar a integração com o LinkedIn.
+        </p>
+        <p class="meta">Última atualização: 6 de abril de 2026</p>
+      </section>
+
+      <section class="grid" aria-label="Conteúdo da política de privacidade">
+        <article class="panel">
+          <section class="section">
+            <h2>1. Informações coletadas</h2>
+            <p>
+              Quando você autoriza o aplicativo com sua conta do LinkedIn, o Pablo Publisher pode
+              receber informações mínimas da sua conta, como nome, identificador do perfil, e-mail,
+              foto de perfil e os escopos autorizados, conforme as permissões concedidas.
+            </p>
+            <p>
+              Em ambiente local, o projeto também pode manter rascunhos, um histórico de publicações
+              realizadas pela ferramenta e dados técnicos mínimos para manter sua autenticação ativa.
+            </p>
+          </section>
+
+          <section class="section">
+            <h2>2. Como as informações são usadas</h2>
+            <p>As informações recebidas são utilizadas exclusivamente para:</p>
+            <ul>
+              <li>autenticar o usuário no fluxo OAuth do LinkedIn;</li>
+              <li>identificar a conta conectada localmente;</li>
+              <li>permitir a criação, revisão e publicação de conteúdo autorizado;</li>
+              <li>registrar histórico local das publicações disparadas por esta ferramenta;</li>
+              <li>operar, depurar e testar a integração com a API oficial do LinkedIn.</li>
+            </ul>
+          </section>
+
+          <section class="section">
+            <h2>3. Armazenamento local</h2>
+            <p>
+              O projeto foi desenhado para uso local e single-user. Por isso, parte dos dados pode ser
+              armazenada apenas na sua máquina, incluindo autenticação persistida, rascunhos e histórico
+              de publicações realizadas pela automação.
+            </p>
+            <p>
+              Esses dados existem para reduzir reautenticações frequentes e manter rastreabilidade das
+              ações executadas pelo fluxo de publicação.
+            </p>
+          </section>
+
+          <section class="section">
+            <h2>4. Compartilhamento de dados</h2>
+            <p>
+              As informações não são vendidas nem compartilhadas com terceiros, exceto quando necessário
+              para a operação técnica da integração com o LinkedIn ou para cumprimento de obrigação legal.
+            </p>
+          </section>
+
+          <section class="section">
+            <h2>5. Retenção e exclusão</h2>
+            <p>
+              Os dados são mantidos apenas pelo tempo necessário para operar a integração local. Você pode
+              revogar o acesso do aplicativo a qualquer momento nas configurações da sua conta do LinkedIn.
+            </p>
+            <p>
+              Também é possível excluir os arquivos locais de autenticação, rascunhos e histórico sempre
+              que desejar interromper o uso da ferramenta.
+            </p>
+          </section>
+
+          <section class="section">
+            <h2>6. Seus direitos</h2>
+            <p>
+              Você pode solicitar esclarecimentos sobre o uso dos seus dados, interromper o uso da
+              integração e revogar a autorização concedida ao aplicativo a qualquer momento.
+            </p>
+          </section>
+        </article>
+
+        <aside class="aside">
+          <section class="aside-card">
+            <h3>Resumo</h3>
+            <strong>Uso local e controlado</strong>
+            <p>
+              O Pablo Publisher foi pensado para operar localmente, com foco em autenticação, rascunhos
+              e publicação assistida no LinkedIn.
+            </p>
+            <div class="tag-list">
+              <span class="tag">OAuth 2.0</span>
+              <span class="tag">Rascunhos locais</span>
+              <span class="tag">Histórico local</span>
+              <span class="tag">Confirmação antes de publicar</span>
+            </div>
+          </section>
+
+          <section class="aside-card">
+            <h3>Segurança</h3>
+            <strong>Escopo mínimo necessário</strong>
+            <p>
+              O aplicativo procura manter apenas os dados mínimos necessários para operar o fluxo local
+              de publicação e reduzir reautenticações desnecessárias.
+            </p>
+          </section>
+
+          <section class="aside-card">
+            <h3>Contato</h3>
+            <strong>Precisa falar comigo?</strong>
+            <p>
+              Para dúvidas sobre esta política ou sobre o uso da integração, entre em contato pelo e-mail
+              <a href="mailto:pablo.stefan.dev@gmail.com">pablo.stefan.dev@gmail.com</a>
+              ou acesse o projeto no
+              <a href="https://github.com/pablostefan/linkedin">GitHub</a>.
+            </p>
+          </section>
+        </aside>
+      </section>
+
+      <footer>
+        Esta política cobre o uso da integração local do Pablo Publisher com o LinkedIn e pode ser
+        atualizada sempre que houver mudanças relevantes no fluxo, nas permissões ou na forma de armazenamento local.
+      </footer>
+    </main>
+  </body>
+</html>

@@ -1,12 +1,15 @@
 # LinkedIn Official API Demo
 
-Projeto minimo para conectar uma conta do LinkedIn via OAuth oficial, obter informacoes basicas do perfil e publicar posts no perfil autenticado.
+Projeto minimo para conectar uma conta do LinkedIn via OAuth oficial, obter informacoes basicas do perfil, manter rascunhos locais e publicar posts de texto no perfil autenticado com confirmacao obrigatoria em duas etapas.
 
 ## O que este projeto faz
 
 - Login com LinkedIn via OAuth 2.0 + OpenID Connect
+- Persistencia local minima de auth em `.local/linkedin/auth.json`
 - Leitura de perfil basico com `GET /me`
-- Publicacao de post de texto com `POST /posts`
+- CRUD local de rascunhos com UUID estavel
+- Preparacao e confirmacao obrigatoria antes de publicar
+- Historico local append-only em `.local/linkedin/publish-history.jsonl`
 - Tentativa opcional de listar posts do autor com `GET /posts`
 
 ## Requisitos
@@ -18,12 +21,26 @@ Projeto minimo para conectar uma conta do LinkedIn via OAuth oficial, obter info
 
 1. Acesse o portal de developers do LinkedIn e crie uma app.
 2. Em Auth, configure o redirect URL:
-   - `http://localhost:3000/auth/linkedin/callback`
+   - `http://localhost:3901/auth/linkedin/callback`
 3. Ative o produto de login:
    - `Sign In with LinkedIn using OpenID Connect`
 4. Ative o produto de postagem que conceda `w_member_social`.
    - Dependendo da disponibilidade na sua app, isso pode aparecer como `Share on LinkedIn` ou `Community Management API`.
 5. Copie `Client ID` e `Client Secret`.
+
+### Para conseguir ler posts ja publicados
+
+Para puxar posts existentes do seu perfil pessoal, nao basta `w_member_social`.
+Voce precisa que o LinkedIn aprove o escopo restrito `r_member_social` para a sua app.
+
+Na pratica, confira isto no portal:
+
+1. A app precisa estar associada ao produto `Community Management API` ou a outro produto que de acesso ao escopo `r_member_social`.
+2. O escopo `r_member_social` precisa estar efetivamente liberado para o app, nao apenas documentado.
+3. Depois da aprovacao, atualize `LINKEDIN_SCOPES` no `.env` para incluir `r_member_social`.
+4. Refaça o login com `npm run linkedin:auth`, porque o token atual nao recebe escopos novos automaticamente.
+
+Se o LinkedIn nao liberar `r_member_social`, a API oficial nao vai conseguir listar seus posts antigos do perfil pessoal.
 
 ## Variaveis de ambiente
 
@@ -37,9 +54,14 @@ Campos principais:
 
 - `LINKEDIN_CLIENT_ID`
 - `LINKEDIN_CLIENT_SECRET`
-- `LINKEDIN_REDIRECT_URI`
 - `SESSION_SECRET`
 - `LINKEDIN_API_VERSION`
+
+Observacoes:
+
+- O contrato local do MVP eh fixo em `http://localhost:3901`.
+- O servidor Express faz bind somente em `127.0.0.1`.
+- `LINKEDIN_REDIRECT_URI` deve continuar apontando para `http://localhost:3901/auth/linkedin/callback`.
 
 Escopos padrao:
 
@@ -47,6 +69,10 @@ Escopos padrao:
 - `profile`
 - `email`
 - `w_member_social`
+
+Escopo adicional para leitura de posts existentes, somente apos aprovacao:
+
+- `r_member_social`
 
 ## Instalar e rodar
 
@@ -57,43 +83,36 @@ npm run dev
 
 Abra:
 
-- `http://localhost:3000`
+- `http://localhost:3901`
 
-## Fluxo de uso
+## Fluxo canonico no VS Code com Copilot
 
-1. Abra a home local.
-2. Clique em `Conectar com LinkedIn`.
-3. Autorize a app.
-4. A callback salvara o token na sessao local.
-5. Use os endpoints abaixo.
+1. Inicie o servidor local com `npm run dev`.
+2. Peça ao Copilot para executar `npm run linkedin:auth`.
+3. Abra a URL retornada em JSON no navegador e conclua o login do LinkedIn.
+4. A callback persistira apenas `accessToken`, `expiresAt`, `scope`, `personUrn` e um resumo minimo do usuario em `.local/linkedin/auth.json`.
+5. Verifique o estado atual com `npm run linkedin:status`.
+6. Se seu app tiver `r_member_social` aprovado, atualize o `.env`, reautentique e use `npm run linkedin:posts:list` para testar a leitura de posts existentes.
+7. Crie um rascunho com `npm run linkedin:draft:create -- --content="Texto do post"`.
+8. Liste ou inspecione rascunhos com `npm run linkedin:draft:list` e `npm run linkedin:draft:show -- --draft-id=<uuid>`.
+9. Prepare a publicacao com `npm run linkedin:publish:prepare -- --draft-id=<uuid>`.
+10. Revise o JSON retornado, incluindo `confirmationId`, `content` e `expiresAt`.
+11. Confirme a publicacao com `npm run linkedin:publish:confirm -- --confirmation-id=<uuid>`.
+12. Consulte o historico local com `npm run linkedin:history:list`.
+
+Todos os comandos imprimem JSON por padrao para facilitar o uso pelo Copilot no VS Code.
+
+## Re-auth e invalidez de token
+
+- Se o auth local expirar, o status mudara para `reauth_required`.
+- Se o LinkedIn responder `401` em `/posts`, `publish confirm` ou outra operacao autenticada, o arquivo `.local/linkedin/auth.json` sera apagado automaticamente.
+- Para reautenticar, execute novamente `npm run linkedin:auth` e repita o login no navegador.
 
 ## Endpoints
 
 ### `GET /me`
 
-Retorna perfil basico e `personUrn` do usuario autenticado.
-
-### `POST /posts`
-
-Publica um post de texto no perfil autenticado.
-
-Body:
-
-```json
-{
-  "content": "Meu primeiro post via API oficial do LinkedIn.",
-  "visibility": "PUBLIC"
-}
-```
-
-Exemplo com `curl`:
-
-```bash
-curl -X POST http://localhost:3000/posts \
-  -H "Content-Type: application/json" \
-  -b cookie.txt -c cookie.txt \
-  -d '{"content":"Meu primeiro post via API oficial do LinkedIn."}'
-```
+Retorna o resumo minimo persistido do usuario autenticado e `personUrn`, mesmo depois de reiniciar o servidor local.
 
 ### `GET /posts`
 
@@ -101,12 +120,108 @@ Tenta listar posts do autor autenticado.
 
 Importante:
 
-- Esse endpoint pode falhar com `403` se sua app nao tiver o escopo restrito `r_member_social`.
-- Isso nao impede login nem publicacao.
+- Esse endpoint exige o escopo restrito `r_member_social` aprovado no LinkedIn.
+- Sem esse escopo, a API costuma responder `403 ACCESS_DENIED`.
+- Isso nao impede login nem a preparacao e confirmacao de publicacoes.
+
+### `npm run linkedin:posts:list`
+
+Atalho via CLI para testar `GET /posts` depois que o app estiver aprovado com `r_member_social`.
+
+Exemplos:
+
+```bash
+npm run linkedin:posts:list
+npm run linkedin:posts:list -- --count=20
+```
+
+### `POST /posts`
+
+Nao publica mais diretamente. O endpoint agora rejeita bypass do fluxo de confirmacao.
+
+### `GET /operator/status`
+
+Retorna `authenticated` ou `reauth_required` com a URL de login local.
+
+### `GET /operator/drafts`
+
+Lista os rascunhos locais de `.local/linkedin/drafts.json`.
+
+### `POST /operator/drafts`
+
+Cria um rascunho local.
+
+Body:
+
+```json
+{
+   "content": "Meu primeiro post via API oficial do LinkedIn."
+}
+```
+
+### `PATCH /operator/drafts/:draftId`
+
+Atualiza um rascunho existente sem trocar o UUID.
+
+### `DELETE /operator/drafts/:draftId`
+
+Remove um rascunho local.
+
+### `POST /operator/publish/prepare`
+
+Congela o conteudo exato que sera publicado e retorna um `confirmationId` de uso unico.
+
+Body:
+
+```json
+{
+   "draftId": "uuid-do-rascunho"
+}
+```
+
+ou
+
+```json
+{
+   "content": "Texto avulso preparado para publicacao."
+}
+```
+
+Resposta:
+
+```json
+{
+   "confirmationId": "uuid",
+   "draftId": "uuid-ou-null",
+   "content": "Texto congelado para publicar.",
+   "expiresAt": "2026-04-06T00:10:00.000Z"
+}
+```
+
+### `POST /operator/publish/confirm`
+
+Executa a publicacao real apenas quando recebe a confirmacao minima.
+
+Body:
+
+```json
+{
+   "confirmationId": "uuid",
+   "confirm": true
+}
+```
+
+### `GET /operator/history`
+
+Lista o historico local mais recente de publicacoes e falhas.
 
 ## Limitacoes importantes
 
-- O projeto usa sessao em memoria. Serve para desenvolvimento local, nao para producao.
+- O projeto continua single-user e local-only.
+- O projeto usa sessao em memoria apenas para o estado OAuth do navegador. O auth reutilizavel fica em `.local/linkedin/auth.json`.
+- O servidor local nao aceita bind fora de `localhost`/`127.0.0.1`.
+- O fluxo de publicacao exige sempre `prepare` seguido de `confirm`. Nao ha caminho suportado de publicacao direta.
+- Os rascunhos usam JSON simples com escrita atomica de arquivo inteiro. Se `drafts.json` estiver corrompido, a API falha fechada com erro claro.
 - O LinkedIn pode exigir aprovacao adicional para alguns escopos de leitura e analytics.
 - Analytics de perfil e posts nao estao incluidos aqui porque normalmente exigem acesso adicional da Community Management API.
 

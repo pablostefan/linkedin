@@ -8,7 +8,20 @@
   },
   "scripts": {
     "dev": "node --watch src/server.js",
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "test": "node --test",
+    "linkedin": "node src/cli.js",
+    "linkedin:auth": "node src/cli.js auth login",
+    "linkedin:status": "node src/cli.js auth status",
+    "linkedin:posts:list": "node src/cli.js posts list",
+    "linkedin:draft:create": "node src/cli.js draft create",
+    "linkedin:draft:list": "node src/cli.js draft list",
+    "linkedin:draft:show": "node src/cli.js draft show",
+    "linkedin:draft:update": "node src/cli.js draft update",
+    "linkedin:draft:delete": "node src/cli.js draft delete",
+    "linkedin:publish:prepare": "node src/cli.js publish prepare",
+    "linkedin:publish:confirm": "node src/cli.js publish confirm",
+    "linkedin:history:list": "node src/cli.js history list"
   },
   "dependencies": {
     "dotenv": "^16.4.5",
