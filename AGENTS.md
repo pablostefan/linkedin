@@ -51,12 +51,13 @@ External agents (not in this repo): `reepl-linkedin` (copy generation), `gem-cri
 - Publishing and analytics are handled by Zernio CLI (`npx zernio`). Config at `~/.zernio/config.json`.
 - Do not use direct `POST /posts` for publishing
 - Do not assume existing personal posts can be fetched from LinkedIn
-- Existing-post retrieval requires `r_member_social`, which should be considered unavailable unless the user confirms otherwise
+- Published posts are synced locally via `npm run linkedin:posts:sync` (stored in `.local/linkedin/zernio-posts.json`). Run sync before using agents that depend on post history
 - Person mentions in posts use LinkedIn little text in `commentary`, for example `@[Nome](urn:li:person:...)`
 - Profile URL to person URN resolution is available via `npm run linkedin:mention:resolve -- --url="URL"` or Zernio's resolver endpoint
 
 ## Local Data
 
 - Drafts: `.local/linkedin/drafts.json`
-- History: `.local/linkedin/publish-history.jsonl`
+- Published posts: `.local/linkedin/zernio-posts.json` (synced via `npm run linkedin:posts:sync`)
+- History: `.local/linkedin/publish-history.jsonl` (local publish log)
 - Rich posts: draft payloads can now include article preview metadata or a single image attachment

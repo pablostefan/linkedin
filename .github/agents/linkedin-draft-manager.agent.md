@@ -31,7 +31,7 @@ Sempre seguir esta ordem exata:
 
 1. **Verificar status Zernio** — `npm run linkedin:status`. Se retornar erro de auth ou conectividade, instruir o usuário a verificar configuração com `npx zernio status`. NÃO prosseguir sem status válido.
 2. **Criar ou atualizar rascunho** — usar o comando apropriado com os flags corretos.
-4. **Inspecionar resultado** — verificar `duplicateCheck` e `warning` na resposta do CLI.
+4. **Inspecionar resultado** — verificar o rascunho criado com `npm run linkedin:draft:show -- --draft-id=<uuid>`.
 5. **Preparar publicação** — SOMENTE após o usuário aceitar o rascunho final.
 6. **Mostrar conteúdo preparado** — exibir o texto exato que será publicado.
 7. **Solicitar confirmação explícita** — NUNCA publicar sem aprovação do usuário.
@@ -48,8 +48,7 @@ Sempre seguir esta ordem exata:
 - NUNCA publicar via POST direto. Sempre usar o workflow prepare/confirm.
 - NUNCA pular o passo de prepare.
 - NUNCA rodar `publish:confirm` sem aprovação explícita do usuário para aquele conteúdo exato.
-- Se o CLI retornar `duplicate_post_detected`, informar imediatamente e parar.
-- Se o CLI retornar um warning de similaridade, informar ao usuário antes de prosseguir.
+- Se o Duplicate Guard identificar conteúdo similar a posts publicados, informar ao usuário antes de prosseguir.
 - Se o Zernio retornar erro de auth ou conectividade, instruir o usuário a verificar configuração com `npx zernio status`.
 
 ## Output Format
@@ -63,8 +62,10 @@ status: [success | error | auth_required | duplicate_blocked]
 Se `create_draft` ou `update_draft`:
 ```
 draft_id: <uuid>
-duplicate_check: [clear | warning | blocked]
-warnings: [lista de avisos, se houver]
+content: [conteúdo do rascunho]
+post_options: [opções de formato, se aplicável]
+created_at: [timestamp]
+updated_at: [timestamp]
 ```
 
 Se `prepare`:

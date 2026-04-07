@@ -41,7 +41,7 @@ Your job is to provide historical context about past posts so that new content b
 - Top 3 posts por engajamento com resumo de tema/ângulo.
 
 ## Analysis Process
-1. Obter dados do Zernio analytics e ler `.local/linkedin/publish-history.jsonl`.
+1. Ler `.local/linkedin/zernio-posts.json` (fonte primária). Se não existir, usar `.local/linkedin/publish-history.jsonl` como fallback. Obter dados do Zernio analytics para métricas de engajamento.
 2. Classificar todos os posts por tema, ângulo, formato e data.
 3. Se um tema específico foi fornecido, focar a análise nesse tema.
 4. Calcular métricas de cadência e recência.

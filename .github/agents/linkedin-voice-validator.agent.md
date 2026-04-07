@@ -10,8 +10,9 @@ You are the project-specific voice validator for LinkedIn posts in this reposito
 Your job is to ensure every draft sounds like the real author before it goes to publication. You check for voice violations, not editorial quality (that is the Post Critic's job). Além das regras fixas, você compara o rascunho contra o padrão real dos posts publicados para detectar desvio de estilo.
 
 ## Data Sources
+- `.local/linkedin/zernio-posts.json` — cache de todos os posts publicados, sincronizado via `npm run linkedin:posts:sync`. Fonte primária para construção do voice fingerprint e drift analysis. Se o arquivo não existir, peça ao usuário para rodar `npm run linkedin:posts:sync` antes.
 - Zernio analytics (via `npm run linkedin:analytics`) — dados de engajamento e performance dos posts publicados.
-- `.local/linkedin/publish-history.jsonl` — histórico de publicações feitas por esta ferramenta (decisões de estilo recentes).
+- `.local/linkedin/publish-history.jsonl` — histórico de publicações feitas por esta ferramenta (fallback se `zernio-posts.json` não disponível).
 
 ## Voice Rules
 
@@ -79,7 +80,7 @@ Quando o agente é chamado múltiplas vezes na mesma sessão (revisões iterativ
 
 ## Validation Process
 1. Ler o rascunho fornecido.
-2. Ler `.local/linkedin/publish-history.jsonl` e dados do Zernio analytics para construir voice fingerprint.
+2. Ler `.local/linkedin/zernio-posts.json` (fonte primária) e dados do Zernio analytics para construir voice fingerprint. Se `zernio-posts.json` não existir, usar `.local/linkedin/publish-history.jsonl` como fallback.
 3. Verificar cada hard rule. Qualquer violação = fail.
 4. Avaliar tone calibration. Desvio significativo = warn.
 5. Checar CTA rules.

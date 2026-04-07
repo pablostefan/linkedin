@@ -25,6 +25,7 @@ This repository is a local LinkedIn posting assistant used from GitHub Copilot i
 - Never skip the `prepare` step.
 - Never run `publish:confirm` without explicit user approval for that exact prepared content.
 - Treat `npm run linkedin:history:list` as the source of truth for posts created by this tool.
+- For published post content and analytics, use `.local/linkedin/zernio-posts.json` (synced via `npm run linkedin:posts:sync`).
 
 ## Zernio Backend
 
@@ -47,6 +48,7 @@ This repository is a local LinkedIn posting assistant used from GitHub Copilot i
 - `npm run linkedin:history:list`
 - `npm run linkedin:analytics -- --days=<n>`
 - `npm run linkedin:mention:resolve -- --url="https://linkedin.com/in/..."`
+- `npm run linkedin:posts:sync`
 
 ## Collaboration Guidance
 

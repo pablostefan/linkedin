@@ -1,5 +1,6 @@
 ---
 description: "Use when writing, reviewing, refining, or preparing LinkedIn posts for this repository. Covers editorial heuristics for technical posts, personal-brand posts, CTA quality, anti-generic writing, and when to recommend text-only versus visual support."
+applyTo: "**/.local/linkedin/**"
 ---
 # LinkedIn Editorial Guidelines
 
