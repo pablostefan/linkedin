@@ -9,10 +9,8 @@ This repository is a local LinkedIn posting assistant used from GitHub Copilot i
 
 ## Canonical Workflow For New Posts
 
-1. Ensure the local server is running with `npm run dev`.
-2. Check authentication with `npm run linkedin:status`.
-3. If the result is `reauth_required`, instruct the user to run `npm run linkedin:auth` and complete browser login before continuing.
-4. Create or update content as a local draft with `npm run linkedin:draft:create` or `npm run linkedin:draft:update`.
+1. Verify Zernio connectivity with `npm run linkedin:status`. If it fails, instruct the user to check Zernio config with `npx zernio status`.
+2. Create or update content as a local draft with `npm run linkedin:draft:create` or `npm run linkedin:draft:update`.
 5. If the post should have a link preview, create it as an article post by passing `--article-source`, `--article-title`, and `--article-description`.
 6. If the post should have a single image, pass `--image-path` and optional `--image-alt`.
 7. Review the draft with `npm run linkedin:draft:show` or `npm run linkedin:draft:list`.
@@ -28,23 +26,16 @@ This repository is a local LinkedIn posting assistant used from GitHub Copilot i
 - Never run `publish:confirm` without explicit user approval for that exact prepared content.
 - Treat `npm run linkedin:history:list` as the source of truth for posts created by this tool.
 
-## Auth And Runtime Assumptions
+## Zernio Backend
 
-- The app runs locally at `http://localhost:3901`.
-- The Express server binds only to `127.0.0.1`.
-- Persistent local auth is stored under `.local/linkedin/auth.json`.
-- If LinkedIn returns `401`, the persisted auth can be invalidated and the user may need to authenticate again.
-
-## Current API Limitation
-
-- Reading existing personal LinkedIn posts through the official API is currently blocked unless the app has `r_member_social`.
-- Assume `r_member_social` is not available unless the user explicitly confirms they have it approved and configured.
-- Do not promise that the project can fetch older personal posts from LinkedIn unless that approval is confirmed.
+- Publishing and analytics are handled by Zernio CLI (`npx zernio`).
+- Zernio config is stored at `~/.zernio/config.json`.
+- The project does not run a local server. All LinkedIn API interaction goes through Zernio.
+- If Zernio returns an auth or connectivity error, instruct the user to verify config with `npx zernio status`.
 
 ## Preferred Commands
 
 - `npm run linkedin:status`
-- `npm run linkedin:auth`
 - `npm run linkedin:draft:create -- --content="..."`
 - `npm run linkedin:draft:create -- --content="..." --article-source="https://..." --article-title="..." --article-description="..."`
 - `npm run linkedin:draft:create -- --content="..." --image-path="/abs/path/image.png" --image-alt="..."`
@@ -54,6 +45,8 @@ This repository is a local LinkedIn posting assistant used from GitHub Copilot i
 - `npm run linkedin:publish:prepare -- --draft-id=<uuid>`
 - `npm run linkedin:publish:confirm -- --confirmation-id=<uuid>`
 - `npm run linkedin:history:list`
+- `npm run linkedin:analytics -- --days=<n>`
+- `npm run linkedin:mention:resolve -- --url="https://linkedin.com/in/..."`
 
 ## Collaboration Guidance
 

@@ -1,6 +1,6 @@
 ---
 name: "LinkedIn Draft Manager"
-description: "Use when persisting drafts, preparing publication, confirming publish, or checking auth/history via the project CLI. Handles the operational lifecycle of a LinkedIn post from draft creation to publication verification."
+description: "Use when persisting drafts, preparing publication, confirming publish, or checking status/history via the project CLI. Handles the operational lifecycle of a LinkedIn post from draft creation to publication verification."
 tools: [read, execute]
 user-invocable: false
 argument-hint: "Describe the operation: create draft, update draft, prepare, confirm publish, check status, or list history."
@@ -13,9 +13,7 @@ Your job is to execute the CLI workflow correctly and safely. You handle draft p
 
 | Command | Purpose |
 |:--------|:--------|
-| `npm run dev` | Iniciar o servidor local (porta 3901) |
-| `npm run linkedin:status` | Verificar autenticação |
-| `npm run linkedin:auth` | Iniciar fluxo de autenticação no browser |
+| `npm run linkedin:status` | Verificar conectividade Zernio |
 | `npm run linkedin:draft:create -- --content="..."` | Criar novo rascunho (text-only) |
 | `npm run linkedin:draft:create -- --content="..." --article-source="URL" --article-title="..." --article-description="..."` | Criar rascunho com link preview |
 | `npm run linkedin:draft:create -- --content="..." --image-path="/abs/path" --image-alt="..."` | Criar rascunho com imagem |
@@ -25,13 +23,14 @@ Your job is to execute the CLI workflow correctly and safely. You handle draft p
 | `npm run linkedin:publish:prepare -- --draft-id=<uuid>` | Preparar publicação |
 | `npm run linkedin:publish:confirm -- --confirmation-id=<uuid>` | Confirmar e publicar |
 | `npm run linkedin:history:list` | Listar histórico de publicações |
+| `npm run linkedin:analytics -- --days=<n>` | Obter analytics dos posts via Zernio |
+| `npm run linkedin:mention:resolve -- --url="https://linkedin.com/in/..."` | Resolver URL de perfil para URN |
 
 ## Required Operational Sequence
 Sempre seguir esta ordem exata:
 
-1. **Verificar servidor** — garantir que `npm run dev` está rodando.
-2. **Verificar auth** — `npm run linkedin:status`. Se `reauth_required`, instruir o usuário a rodar `npm run linkedin:auth` e completar login no browser. NÃO prosseguir sem auth válida.
-3. **Criar ou atualizar rascunho** — usar o comando apropriado com os flags corretos.
+1. **Verificar status Zernio** — `npm run linkedin:status`. Se retornar erro de auth ou conectividade, instruir o usuário a verificar configuração com `npx zernio status`. NÃO prosseguir sem status válido.
+2. **Criar ou atualizar rascunho** — usar o comando apropriado com os flags corretos.
 4. **Inspecionar resultado** — verificar `duplicateCheck` e `warning` na resposta do CLI.
 5. **Preparar publicação** — SOMENTE após o usuário aceitar o rascunho final.
 6. **Mostrar conteúdo preparado** — exibir o texto exato que será publicado.
@@ -51,7 +50,7 @@ Sempre seguir esta ordem exata:
 - NUNCA rodar `publish:confirm` sem aprovação explícita do usuário para aquele conteúdo exato.
 - Se o CLI retornar `duplicate_post_detected`, informar imediatamente e parar.
 - Se o CLI retornar um warning de similaridade, informar ao usuário antes de prosseguir.
-- Se o LinkedIn retornar 401, a auth pode ter sido invalidada. Instruir re-autenticação.
+- Se o Zernio retornar erro de auth ou conectividade, instruir o usuário a verificar configuração com `npx zernio status`.
 
 ## Output Format
 

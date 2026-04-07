@@ -36,10 +36,8 @@ External agents (not in this repo): `reepl-linkedin` (copy generation), `gem-cri
 
 ## Post Workflow
 
-1. Start server: `npm run dev`
-2. Check auth: `npm run linkedin:status`
-3. If needed, re-auth: `npm run linkedin:auth`
-4. Create or update draft: `npm run linkedin:draft:create` or `npm run linkedin:draft:update`
+1. Check Zernio connectivity: `npm run linkedin:status`. If it fails, verify config with `npx zernio status`.
+2. Create or update draft: `npm run linkedin:draft:create` or `npm run linkedin:draft:update`
 5. Use article-preview flags when the post should render a link card: `--article-source`, `--article-title`, `--article-description`
 6. Use image flags when the post should attach a single image: `--image-path`, optional `--image-alt`
 7. Inspect draft: `npm run linkedin:draft:show` or `npm run linkedin:draft:list`
@@ -50,17 +48,15 @@ External agents (not in this repo): `reepl-linkedin` (copy generation), `gem-cri
 
 ## Constraints
 
-- Local URL contract is `http://localhost:3901`
+- Publishing and analytics are handled by Zernio CLI (`npx zernio`). Config at `~/.zernio/config.json`.
 - Do not use direct `POST /posts` for publishing
 - Do not assume existing personal posts can be fetched from LinkedIn
 - Existing-post retrieval requires `r_member_social`, which should be considered unavailable unless the user confirms otherwise
 - Person mentions in posts use LinkedIn little text in `commentary`, for example `@[Nome](urn:li:person:...)`
-- Profile URL to person URN resolution is available via `--mention-person-url`, `resolve person-urn` CLI command, or `POST /operator/resolve/person-urn` endpoint
-- Resolution uses Playwright with the persistent browser profile; the user must be logged into LinkedIn in that profile
+- Profile URL to person URN resolution is available via `npm run linkedin:mention:resolve -- --url="URL"` or Zernio's resolver endpoint
 
 ## Local Data
 
-- Auth: `.local/linkedin/auth.json`
 - Drafts: `.local/linkedin/drafts.json`
 - History: `.local/linkedin/publish-history.jsonl`
 - Rich posts: draft payloads can now include article preview metadata or a single image attachment

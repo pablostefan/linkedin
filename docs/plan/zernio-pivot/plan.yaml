@@ -1,0 +1,359 @@
+plan_id: zernio-pivot
+version: "1.0.0"
+objective: >
+  Pivotar o projeto LinkedIn de um pipeline Express + LinkedIn API para
+  Zernio CLI como backend de publicação e analytics, mantendo os agentes
+  de IA para composição de posts.
+complexity: medium
+status: pending_approval
+
+plan_metrics:
+  total_tasks: 16
+  total_waves: 5
+  wave_1_task_count: 6
+  total_dependencies: 10
+  risk_score: low
+
+# ─────────────────────────────────────────────
+# Wave 1 — Remoção de arquivos obsoletos
+# ─────────────────────────────────────────────
+wave_1:
+  name: "Remoção de arquivos obsoletos"
+  tasks:
+    - task_id: "w1-t1"
+      title: "Remover src/linkedin.js"
+      agent: gem-implementer
+      status: pending
+      wave: 1
+      dependencies: []
+      task_definition:
+        action: delete_file
+        target: src/linkedin.js
+        reason: "Zernio CLI substitui todas as chamadas à LinkedIn API (OAuth, posts, connections, mentions, image upload)"
+
+    - task_id: "w1-t2"
+      title: "Remover src/linkedin-sync.js"
+      agent: gem-implementer
+      status: pending
+      wave: 1
+      dependencies: []
+      task_definition:
+        action: delete_file
+        target: src/linkedin-sync.js
+        reason: "Zernio analytics API substitui o scraper via Playwright"
+
+    - task_id: "w1-t3"
+      title: "Remover src/app.js"
+      agent: gem-implementer
+      status: pending
+      wave: 1
+      dependencies: []
+      task_definition:
+        action: delete_file
+        target: src/app.js
+        reason: "Express server não é mais necessário; CLI conversa diretamente com Zernio"
+
+    - task_id: "w1-t4"
+      title: "Remover src/server.js"
+      agent: gem-implementer
+      status: pending
+      wave: 1
+      dependencies: []
+      task_definition:
+        action: delete_file
+        target: src/server.js
+        reason: "Entry point do Express; removido junto com app.js"
+
+    - task_id: "w1-t5"
+      title: "Remover test/app.test.js"
+      agent: gem-implementer
+      status: pending
+      wave: 1
+      dependencies: []
+      task_definition:
+        action: delete_file
+        target: test/app.test.js
+        reason: "Testes do Express server removido"
+
+    - task_id: "w1-t6"
+      title: "Remover test/linkedin-sync.test.js"
+      agent: gem-implementer
+      status: pending
+      wave: 1
+      dependencies: []
+      task_definition:
+        action: delete_file
+        target: test/linkedin-sync.test.js
+        reason: "Testes do scraper removido"
+
+# ─────────────────────────────────────────────
+# Wave 2 — Reescrita dos módulos core
+# ─────────────────────────────────────────────
+wave_2:
+  name: "Reescrita dos módulos core"
+  tasks:
+    - task_id: "w2-t1"
+      title: "Simplificar src/config.js"
+      agent: gem-implementer
+      status: pending
+      wave: 2
+      dependencies: ["w1-t1", "w1-t3", "w1-t4"]
+      task_definition:
+        action: rewrite_file
+        target: src/config.js
+        changes:
+          remove:
+            - "port, serverHost, appBaseUrl, authUrl"
+            - "sessionSecret, linkedinClientId, linkedinClientSecret, linkedinRedirectUri"
+            - "linkedinApiVersion, linkedinScopes, linkedinSyncStartUrl"
+            - "browserProfileDirPath, syncDirPath, syncPostsFilePath, syncStateFilePath"
+            - "connectionsFilePath, authFilePath"
+          keep:
+            - "dotenv config loading"
+            - "localDataDir"
+            - "draftsFilePath, draftsBackupFilePath"
+            - "publishHistoryFilePath"
+            - "publishIntentTtlMs"
+          add:
+            - "zernioAccountId: from env or hardcoded '69d527827dea335c2bc20f6f'"
+            - "zernioApiKey: from env ZERNIO_API_KEY (optional, CLI uses ~/.zernio/config.json)"
+
+    - task_id: "w2-t2"
+      title: "Criar src/zernio.js"
+      agent: gem-implementer
+      status: pending
+      wave: 2
+      dependencies: ["w2-t1"]
+      task_definition:
+        action: create_file
+        target: src/zernio.js
+        description: >
+          Módulo wrapper para Zernio CLI via child_process.execFile.
+          Funções a implementar:
+          - publishPost({ content, accountId, publishNow, firstComment, mentions, mediaItems }) — executa 'zernio post create'
+          - getAnalytics({ accountId, fromDate, toDate, sortBy, limit }) — executa 'zernio analytics' ou HTTP GET /v1/analytics
+          - resolveMention({ name, accountId }) — resolve URN de pessoa via Zernio
+          Todas retornam Promise. Erros são wrappados com códigos claros.
+        constraints:
+          - "Usar child_process.execFile (não exec) para segurança"
+          - "Zernio CLI é global, path descoberto via 'which zernio'"
+          - "Mentions: mentionFormat deve ser embutido no content, array mentions é informacional"
+          - "accountId default vem de config.js"
+
+    - task_id: "w2-t3"
+      title: "Limpar src/local-state.js"
+      agent: gem-implementer
+      status: pending
+      wave: 2
+      dependencies: ["w2-t1"]
+      task_definition:
+        action: edit_file
+        target: src/local-state.js
+        changes:
+          remove:
+            - "SyncStoreCorruptedError class"
+            - "loadPersistedAuth, savePersistedAuth, invalidatePersistedAuth"
+            - "loadSyncPostsStore, loadSyncState, saveSyncPostsStore, saveSyncState"
+            - "loadConnections, saveConnections, findConnectionByName"
+            - "ensureSyncDir"
+            - "buildReauthState, normalizeUserSummary"
+            - "SYNC_STORE_VERSION constant"
+          keep:
+            - "DraftStoreCorruptedError"
+            - "DRAFT_STORE_VERSION"
+            - "sortDraftsByUpdatedAt, normalizeOptionalString, isValidMentionUrn"
+            - "normalizeMentions, normalizePostOptions"
+            - "readUtf8File"
+            - "createLocalState factory (simplified exports)"
+            - "loadDraftStore, writeDraftStoreAtomically"
+            - "listDrafts, getDraft, saveDraft, deleteDraft"
+            - "appendHistoryEntry, listHistory"
+            - "createPublishIntent, consumePublishIntent, purgeExpiredIntents"
+          update_exports:
+            - "Remove auth/sync/connections from returned object"
+
+# ─────────────────────────────────────────────
+# Wave 3 — Reescrita do CLI
+# ─────────────────────────────────────────────
+wave_3:
+  name: "Reescrita do CLI"
+  tasks:
+    - task_id: "w3-t1"
+      title: "Reescrever src/cli.js"
+      agent: gem-implementer
+      status: pending
+      wave: 3
+      dependencies: ["w2-t1", "w2-t2", "w2-t3"]
+      task_definition:
+        action: rewrite_file
+        target: src/cli.js
+        description: >
+          CLI dispatcher que opera diretamente sobre local-state e zernio.js.
+          Não faz HTTP requests. Não precisa de servidor rodando.
+        commands:
+          - "draft create --content='...' [--article-source=... --article-title=... --article-description=...] [--image-path=... --image-alt=...] [--mention-name=... --mention-urn=...]"
+          - "draft list"
+          - "draft show --draft-id=<uuid>"
+          - "draft update --draft-id=<uuid> --content='...'"
+          - "draft delete --draft-id=<uuid>"
+          - "publish prepare --draft-id=<uuid>"
+          - "publish confirm --confirmation-id=<uuid>"
+          - "history list [--limit=N]"
+          - "analytics [--from=YYYY-MM-DD] [--to=YYYY-MM-DD] [--sort-by=engagement]"
+        behavior:
+          draft_commands: "Operam diretamente em local-state (sem HTTP)"
+          publish_prepare: "Cria publish intent em memória, mostra conteúdo para confirmação"
+          publish_confirm: "Consome intent, chama zernio.publishPost(), salva no history, deleta draft"
+          analytics: "Chama zernio.getAnalytics()"
+          mentions: "Embute mentionFormat no content antes de passar para Zernio"
+
+# ─────────────────────────────────────────────
+# Wave 4 — Atualização de agentes e instruções
+# ─────────────────────────────────────────────
+wave_4:
+  name: "Atualização de agentes e instruções"
+  tasks:
+    - task_id: "w4-t1"
+      title: "Reescrever .github/copilot-instructions.md"
+      agent: gem-documentation-writer
+      status: pending
+      wave: 4
+      dependencies: ["w3-t1"]
+      task_definition:
+        action: rewrite_file
+        target: .github/copilot-instructions.md
+        changes:
+          - "Remover todas as referências a Express server, npm run dev, OAuth"
+          - "Novo workflow: draft:create -> draft:show -> publish:prepare -> confirm -> history:list"
+          - "Remover: linkedin:auth, linkedin:status, linkedin:sync*, linkedin:connections*"
+          - "Adicionar: linkedin:analytics"
+          - "Atualizar Safety Rules: manter 'never skip prepare', 'never confirm without approval'"
+          - "Atualizar Auth section: Zernio CLI autentica via ~/.zernio/config.json"
+          - "Remover: seção sobre r_member_social"
+          - "Manter: Collaboration Guidance, Agent Architecture table"
+
+    - task_id: "w4-t2"
+      title: "Reescrever linkedin-draft-manager.agent.md"
+      agent: gem-documentation-writer
+      status: pending
+      wave: 4
+      dependencies: ["w3-t1"]
+      task_definition:
+        action: rewrite_file
+        target: .github/agents/linkedin-draft-manager.agent.md
+        changes:
+          - "Atualizar tabela de comandos CLI para novos comandos"
+          - "Remover referências a 'npm run dev' e 'verificar servidor'"
+          - "Remover referências a 'npm run linkedin:auth' e 'npm run linkedin:status'"
+          - "Atualizar sequência operacional: draft create -> inspect -> prepare -> confirm -> history"
+          - "Manter safety rules"
+          - "Adicionar: comando analytics"
+
+    - task_id: "w4-t3"
+      title: "Atualizar AGENTS.md"
+      agent: gem-documentation-writer
+      status: pending
+      wave: 4
+      dependencies: ["w3-t1"]
+      task_definition:
+        action: edit_file
+        target: AGENTS.md
+        changes:
+          - "Atualizar Post Workflow (remover steps 1-3 sobre server/auth)"
+          - "Atualizar Preferred Commands"
+          - "Atualizar Constraints: remover referências a localhost:3901"
+          - "Atualizar Local Data: remover auth.json, browser-profile, sync/, connections.json"
+          - "Adicionar: Zernio CLI como dependência externa"
+
+    - task_id: "w4-t4"
+      title: "Minor updates em agentes que referenciam paths antigos"
+      agent: gem-documentation-writer
+      status: pending
+      wave: 4
+      dependencies: ["w3-t1"]
+      task_definition:
+        action: edit_files
+        targets:
+          - file: .github/agents/linkedin-voice-validator.agent.md
+            changes: "Atualizar referências a .local/linkedin/sync/posts.json -> publish-history.jsonl como fonte única"
+          - file: .github/agents/linkedin-performance-coach.agent.md
+            changes: "Atualizar fonte de analytics para Zernio API via CLI"
+          - file: .github/agents/linkedin-editorial-memory.agent.md
+            changes: "Atualizar referências de dados para publish-history.jsonl e Zernio analytics"
+          - file: .github/agents/linkedin-duplicate-guard.agent.md
+            changes: "Atualizar referência a sync/posts.json -> publish-history.jsonl"
+          - file: .github/agents/linkedin-preview-qa.agent.md
+            changes: "Remover referências a servidor local e OG metadata fetch via localhost"
+          - file: .github/agents/linkedin-publishing-orchestrator.agent.md
+            changes: "Atualizar Phase 9 para usar novo Draft Manager workflow sem servidor"
+
+# ─────────────────────────────────────────────
+# Wave 5 — Package.json, cleanup e testes
+# ─────────────────────────────────────────────
+wave_5:
+  name: "Package.json, cleanup e testes"
+  tasks:
+    - task_id: "w5-t1"
+      title: "Atualizar package.json"
+      agent: gem-implementer
+      status: pending
+      wave: 5
+      dependencies: ["w3-t1"]
+      task_definition:
+        action: edit_file
+        target: package.json
+        changes:
+          remove_dependencies:
+            - express
+            - express-session
+            - playwright
+          remove_scripts:
+            - dev
+            - start
+            - "linkedin:auth"
+            - "linkedin:status"
+            - "linkedin:posts:list"
+            - "linkedin:sync:run"
+            - "linkedin:sync:status"
+            - "linkedin:sync:list"
+            - "linkedin:sync:backfill"
+            - "linkedin:sync:backfill:deep"
+            - "linkedin:connections:sync"
+            - "linkedin:connections:list"
+          keep_scripts:
+            - test
+            - linkedin
+            - "linkedin:draft:create"
+            - "linkedin:draft:list"
+            - "linkedin:draft:show"
+            - "linkedin:draft:update"
+            - "linkedin:draft:delete"
+            - "linkedin:publish:prepare"
+            - "linkedin:publish:confirm"
+            - "linkedin:history:list"
+          add_scripts:
+            - "linkedin:analytics": "node src/cli.js analytics"
+          update:
+            - "name: linkedin-zernio-workflow"
+
+    - task_id: "w5-t2"
+      title: "Criar testes para novos módulos"
+      agent: gem-implementer
+      status: pending
+      wave: 5
+      dependencies: ["w3-t1", "w2-t2"]
+      task_definition:
+        action: create_files
+        targets:
+          - file: test/zernio.test.js
+            scope: "Testar wrapper Zernio (mock child_process)"
+          - file: test/cli.test.js
+            scope: "Testar CLI dispatcher (draft CRUD, publish flow)"
+          - file: test/local-state.test.js
+            scope: "Testar draft CRUD e publish intents após cleanup"
+
+planning_pass: 1
+planning_history:
+  - pass: 1
+    action: "Plano manual criado pelo orchestrator (gem-planner indisponível por erro de rede)"
+    timestamp: "2025-07-15"

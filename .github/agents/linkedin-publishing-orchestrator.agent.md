@@ -92,7 +92,7 @@ Your ONLY job is to detect the current phase, pick the best specialist agent for
   - Se `critical`: corrigir antes de persistir.
   - Se `high/medium`: informar ao usuário.
 - **Draft & Publish:** Delegar para `LinkedIn Draft Manager` para executar o workflow CLI:
-  1. Verificar server e auth.
+  1. Verificar status Zernio (`npm run linkedin:status`).
   2. Criar/atualizar rascunho com o formato correto.
   3. Preparar publicação.
   4. Mostrar conteúdo preparado ao usuário.
@@ -105,7 +105,7 @@ Your ONLY job is to detect the current phase, pick the best specialist agent for
 - Se o usuário está iterando no copy: loop entre Phase 2-5 sem re-executar phases posteriores.
 - Se o usuário pede para publicar diretamente: ainda passar por Phase 8 e Phase 9 completas.
 - Se um agente falhar ou retornar resultado insatisfatório: re-delegar com contexto do erro.
-- Se o CLI retornar auth inválida: parar e instruir re-autenticação via `LinkedIn Draft Manager`.
+- Se o Zernio retornar erro de auth ou conectividade: parar e instruir o usuário a verificar configuração com `npx zernio status`.
 - Preferir `LinkedIn Post Critic` sobre `gem-critic` para feedback de copy.
 - Usar `gem-critic` SOMENTE para desafios estratégicos.
 - Ao iterar, preferir revisões pontuais do rascunho escolhido sobre gerar múltiplas opções novas.
