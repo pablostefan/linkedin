@@ -54,6 +54,9 @@ External agents (not in this repo): `reepl-linkedin` (copy generation), `gem-cri
 - Do not use direct `POST /posts` for publishing
 - Do not assume existing personal posts can be fetched from LinkedIn
 - Existing-post retrieval requires `r_member_social`, which should be considered unavailable unless the user confirms otherwise
+- Person mentions in posts use LinkedIn little text in `commentary`, for example `@[Nome](urn:li:person:...)`
+- Profile URL to person URN resolution is available via `--mention-person-url`, `resolve person-urn` CLI command, or `POST /operator/resolve/person-urn` endpoint
+- Resolution uses Playwright with the persistent browser profile; the user must be logged into LinkedIn in that profile
 
 ## Local Data
 

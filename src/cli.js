@@ -125,18 +125,77 @@ function resolveStringFlag(flags, name) {
   return value === undefined ? undefined : String(value);
 }
 
-function resolvePostOptions(flags) {
+async function resolveMentions(flags) {
+  const personName = resolveStringFlag(flags, "mention-person-name");
+  const personUrn = resolveStringFlag(flags, "mention-person-urn");
+  const personUrl = resolveStringFlag(flags, "mention-person-url");
+  const personEmail = resolveStringFlag(flags, "mention-person-email");
+
+  if (personName === undefined && personUrn === undefined && personUrl === undefined && personEmail === undefined) {
+    return undefined;
+  }
+
+  let resolvedUrn = personUrn;
+
+  if (!resolvedUrn && personEmail) {
+    const { resolvePersonUrnByEmail } = await import("./linkedin.js");
+    const localState = createLocalState(config);
+    const authStatus = await localState.loadPersistedAuth();
+    if (!authStatus.authenticated) {
+      throw new Error("Authentication required to resolve person URN by email. Run: npm run linkedin:auth");
+    }
+    resolvedUrn = await resolvePersonUrnByEmail({ accessToken: authStatus.auth.accessToken, email: personEmail });
+  }
+
+  if (!resolvedUrn && personUrl) {
+    const { resolvePersonUrnFromProfileUrl } = await import("./linkedin-sync.js");
+    const result = await resolvePersonUrnFromProfileUrl({ profileUrl: personUrl });
+    resolvedUrn = result.personUrn;
+  }
+
+  if (!resolvedUrn && personName) {
+    const localState = createLocalState(config);
+    const { connections } = await localState.loadConnections();
+
+    if (connections.length === 0) {
+      throw new Error("No cached connections. Run: npm run linkedin:connections:sync");
+    }
+
+    const matches = localState.findConnectionByName(connections, personName);
+
+    if (matches.length === 1) {
+      resolvedUrn = matches[0].personUrn;
+    } else if (matches.length > 1) {
+      const list = matches.map((c) => `  - ${c.firstName} ${c.lastName} (${c.personUrn})`).join("\n");
+      throw new Error(`Multiple connections match "${personName}":\n${list}\nUse --mention-person-urn to pick one.`);
+    } else {
+      throw new Error(`No connection found matching "${personName}". Run: npm run linkedin:connections:sync`);
+    }
+  }
+
+  return [
+    {
+      type: "person",
+      name: personName,
+      urn: resolvedUrn
+    }
+  ];
+}
+
+async function resolvePostOptions(flags) {
   const articleSource = resolveStringFlag(flags, "article-source");
   const articleTitle = resolveStringFlag(flags, "article-title");
   const articleDescription = resolveStringFlag(flags, "article-description");
   const articleThumbnailPath = resolveStringFlag(flags, "article-thumbnail-path");
   const imagePath = resolveStringFlag(flags, "image-path");
   const imageAlt = resolveStringFlag(flags, "image-alt");
+  const mentions = await resolveMentions(flags);
 
   const hasArticle = [articleSource, articleTitle, articleDescription, articleThumbnailPath].some(Boolean);
   const hasImage = [imagePath, imageAlt].some(Boolean);
+  const hasMentions = Array.isArray(mentions) && mentions.length > 0;
 
-  if (!hasArticle && !hasImage) {
+  if (!hasArticle && !hasImage && !hasMentions) {
     return undefined;
   }
 
@@ -154,7 +213,8 @@ function resolvePostOptions(flags) {
           path: imagePath,
           altText: imageAlt
         }
-      : undefined
+      : undefined,
+    mentions
   };
 }
 
@@ -165,7 +225,7 @@ async function main() {
   if (!domain) {
     printJson({
       error: "missing_command",
-      message: "Use auth, posts, draft, publish, history, or sync commands."
+      message: "Use auth, posts, draft, publish, history, sync, or connections commands."
     });
     process.exitCode = 1;
     return;
@@ -236,6 +296,47 @@ async function main() {
       return;
     }
 
+    if (domain === "resolve" && action === "person-urn") {
+      const url = resolveStringFlag(flags, "url");
+      if (!url) {
+        printJson({ error: "missing_flag", message: "--url is required. Pass a LinkedIn profile URL." });
+        process.exitCode = 1;
+        return;
+      }
+      const { resolvePersonUrnFromProfileUrl } = await import("./linkedin-sync.js");
+      result = await resolvePersonUrnFromProfileUrl({
+        profileUrl: url,
+        appConfig: config,
+        headless: resolveBooleanFlag(flags, "headless", true)
+      });
+      printJson(result);
+      return;
+    }
+
+    if (domain === "connections" && action === "sync") {
+      const localState = createLocalState(config);
+      const authStatus = await localState.loadPersistedAuth();
+      if (!authStatus.authenticated) {
+        printJson({ error: "not_authenticated", message: "Run: npm run linkedin:auth" });
+        process.exitCode = 1;
+        return;
+      }
+      const { fetchConnections } = await import("./linkedin.js");
+      const connections = await fetchConnections({ accessToken: authStatus.auth.accessToken });
+      await localState.saveConnections(connections);
+      printJson({ ok: true, syncedCount: connections.length });
+      return;
+    }
+
+    if (domain === "connections" && action === "list") {
+      const localState = createLocalState(config);
+      const { connections, syncedAt } = await localState.loadConnections();
+      const query = resolveStringFlag(flags, "query");
+      const filtered = query ? localState.findConnectionByName(connections, query) : connections;
+      printJson({ syncedAt, total: connections.length, showing: filtered.length, connections: filtered });
+      return;
+    }
+
     if (domain === "auth" && action === "status") {
       result = await requestJson("GET", "/operator/status");
     } else if (domain === "posts" && action === "list") {
@@ -244,7 +345,7 @@ async function main() {
     } else if (domain === "draft" && action === "create") {
       result = await requestJson("POST", "/operator/drafts", {
         content: resolveContent(flags),
-        postOptions: resolvePostOptions(flags)
+        postOptions: await resolvePostOptions(flags)
       });
     } else if (domain === "draft" && action === "list") {
       result = await requestJson("GET", "/operator/drafts");
@@ -253,7 +354,7 @@ async function main() {
     } else if (domain === "draft" && action === "update") {
       result = await requestJson("PATCH", `/operator/drafts/${resolveDraftId(positionals, flags)}`, {
         content: resolveContent(flags),
-        postOptions: resolvePostOptions(flags)
+        postOptions: await resolvePostOptions(flags)
       });
     } else if (domain === "draft" && action === "delete") {
       result = await requestJson("DELETE", `/operator/drafts/${resolveDraftId(positionals, flags)}`);
@@ -262,7 +363,7 @@ async function main() {
         draftId: flags["draft-id"] || null,
         content: resolveContent(flags),
         allowDuplicate: resolveBooleanFlag(flags, "allow-duplicate", false),
-        postOptions: resolvePostOptions(flags)
+        postOptions: await resolvePostOptions(flags)
       });
     } else if (domain === "publish" && action === "confirm") {
       result = await requestJson("POST", "/operator/publish/confirm", {
@@ -275,7 +376,7 @@ async function main() {
     } else {
       printJson({
         error: "unknown_command",
-        message: "Supported commands: auth status|login, posts list, draft create|list|show|update|delete, publish prepare|confirm, history list, sync run|status|list."
+        message: "Supported commands: auth status|login, posts list, draft create|list|show|update|delete, publish prepare|confirm, history list, sync run|status|list, connections sync|list, resolve person-urn."
       });
       process.exitCode = 1;
       return;
@@ -294,6 +395,16 @@ async function main() {
         reauthRequired: error.code === "browser_login_required",
         browserProfilePath: config.browserProfileDirPath,
         startUrl: config.linkedinSyncStartUrl
+      });
+      process.exitCode = 1;
+      return;
+    }
+
+    if (domain === "resolve") {
+      printJson({
+        error: error.code || "resolve_failed",
+        message: error.message,
+        profileUrl: resolveStringFlag(flags, "url")
       });
       process.exitCode = 1;
       return;

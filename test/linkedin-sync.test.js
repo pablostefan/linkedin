@@ -15,6 +15,7 @@ const {
   listLinkedinSyncPosts,
   mergeSyncPosts,
   normalizeMetricCount,
+  resolvePersonUrnFromProfileUrl,
   resolveSyncRunOptions,
   selectPostsForEnrichment,
   normalizeVisibleText
@@ -419,5 +420,25 @@ test("listLinkedinSyncPosts supports limit and query filters", async () => {
     assert.equal(filteredResult.posts[0].metrics.rawText, undefined);
   } finally {
     await fs.rm(workspaceDir, { recursive: true, force: true });
+  }
+});
+
+test("resolvePersonUrnFromProfileUrl rejects missing, invalid, non-LinkedIn, and non-profile URLs", async () => {
+  const cases = [
+    { input: undefined, code: "invalid_profile_url", label: "missing url" },
+    { input: "", code: "invalid_profile_url", label: "empty string" },
+    { input: 123, code: "invalid_profile_url", label: "non-string" },
+    { input: "not-a-url", code: "invalid_profile_url", label: "unparseable url" },
+    { input: "https://example.com/in/someone", code: "invalid_profile_url", label: "non-LinkedIn host" },
+    { input: "https://www.linkedin.com/company/acme", code: "invalid_profile_url", label: "company url, not /in/" }
+  ];
+
+  for (const { input, code, label } of cases) {
+    try {
+      await resolvePersonUrnFromProfileUrl({ profileUrl: input });
+      assert.fail(`Expected error for ${label}`);
+    } catch (err) {
+      assert.equal(err.code, code, `Wrong error code for ${label}: got ${err.code}`);
+    }
   }
 });

@@ -45,6 +45,56 @@ function normalizeOptionalString(value) {
   return normalizedValue ? normalizedValue : null;
 }
 
+function isValidMentionUrn(urn) {
+  return /^urn:li:(?:person|member):[A-Za-z0-9_-]+$/.test(urn);
+}
+
+function normalizeMentions(rawMentions, errorCode) {
+  if (rawMentions === undefined || rawMentions === null) {
+    return null;
+  }
+
+  if (!Array.isArray(rawMentions)) {
+    const error = new Error("Mentions must be provided as an array.");
+    error.code = errorCode;
+    throw error;
+  }
+
+  const mentions = rawMentions.map((mention) => {
+    if (!mention || typeof mention !== "object") {
+      const error = new Error("Each mention must be an object with name and urn.");
+      error.code = errorCode;
+      throw error;
+    }
+
+    const type = normalizeOptionalString(mention.type) || "person";
+    const name = normalizeOptionalString(mention.name);
+    const urn = normalizeOptionalString(mention.urn);
+
+    if (type !== "person") {
+      const error = new Error("Only person mentions are supported in this workflow.");
+      error.code = errorCode;
+      throw error;
+    }
+
+    if (!name || !urn) {
+      const error = new Error("Person mentions require both name and urn.");
+      error.code = errorCode;
+      throw error;
+    }
+
+    if (!isValidMentionUrn(urn)) {
+      const error = new Error(`Invalid LinkedIn mention URN: ${urn}`);
+      error.code = errorCode;
+      throw error;
+    }
+
+    return { type, name, urn };
+  });
+
+  return mentions.length > 0 ? mentions : null;
+}
+
 function normalizePostOptions(postOptions, errorCode) {
   if (!postOptions || typeof postOptions !== "object") {
     return null;
@@ -56,11 +106,13 @@ function normalizePostOptions(postOptions, errorCode) {
   const articleThumbnailPath = normalizeOptionalString(postOptions.article?.thumbnailPath);
   const imagePath = normalizeOptionalString(postOptions.image?.path);
   const imageAltText = normalizeOptionalString(postOptions.image?.altText);
+  const mentions = normalizeMentions(postOptions.mentions, errorCode);
 
   const hasArticle = [articleSource, articleTitle, articleDescription, articleThumbnailPath].some(Boolean);
   const hasImage = [imagePath, imageAltText].some(Boolean);
+  const hasMentions = Array.isArray(mentions) && mentions.length > 0;
 
-  if (!hasArticle && !hasImage) {
+  if (!hasArticle && !hasImage && !hasMentions) {
     return null;
   }
 
@@ -83,7 +135,14 @@ function normalizePostOptions(postOptions, errorCode) {
         title: articleTitle,
         description: articleDescription,
         thumbnailPath: articleThumbnailPath
-      }
+      },
+      ...(hasMentions ? { mentions } : {})
+    };
+  }
+
+  if (!hasImage) {
+    return {
+      mentions
     };
   }
 
@@ -97,7 +156,8 @@ function normalizePostOptions(postOptions, errorCode) {
     image: {
       path: imagePath,
       altText: imageAltText
-    }
+    },
+    ...(hasMentions ? { mentions } : {})
   };
 }
 
@@ -436,7 +496,7 @@ export function createLocalState(appConfig) {
     }
   }
 
-  function createPublishIntent({ draftId = null, content, postOptions }) {
+  function createPublishIntent({ draftId = null, content, postOptions, rawContent = null }) {
     const normalizedContent = typeof content === "string" ? content.trim() : "";
 
     if (!normalizedContent) {
@@ -453,6 +513,7 @@ export function createLocalState(appConfig) {
       confirmationId,
       draftId,
       content: normalizedContent,
+      ...(rawContent ? { rawContent: rawContent.trim() } : {}),
       postOptions: normalizedPostOptions,
       createdAt: new Date(now).toISOString(),
       expiresAt: new Date(now + appConfig.publishIntentTtlMs).toISOString(),
@@ -466,6 +527,7 @@ export function createLocalState(appConfig) {
       confirmationId: intent.confirmationId,
       draftId: intent.draftId,
       content: intent.content,
+      ...(intent.rawContent ? { rawContent: intent.rawContent } : {}),
       postOptions: intent.postOptions,
       expiresAt: intent.expiresAt
     };
@@ -520,19 +582,56 @@ export function createLocalState(appConfig) {
     };
   }
 
+  async function loadConnections() {
+    const raw = await readUtf8File(appConfig.connectionsFilePath);
+
+    if (!raw) {
+      return { connections: [], syncedAt: null };
+    }
+
+    try {
+      const parsed = JSON.parse(raw);
+      return {
+        connections: Array.isArray(parsed.connections) ? parsed.connections : [],
+        syncedAt: parsed.syncedAt || null
+      };
+    } catch {
+      return { connections: [], syncedAt: null };
+    }
+  }
+
+  async function saveConnections(connections) {
+    await ensureLocalDataDir();
+    await writeJsonFileAtomically(appConfig.connectionsFilePath, {
+      syncedAt: new Date().toISOString(),
+      connections
+    });
+  }
+
+  function findConnectionByName(connections, query) {
+    const normalizedQuery = query.toLowerCase();
+    return connections.filter((connection) => {
+      const fullName = `${connection.firstName} ${connection.lastName}`.toLowerCase();
+      return fullName.includes(normalizedQuery);
+    });
+  }
+
   return {
     appendHistoryEntry,
     consumePublishIntent,
     createPublishIntent,
     deleteDraft,
+    findConnectionByName,
     getDraft,
     invalidatePersistedAuth,
     listDrafts,
     listHistory,
+    loadConnections,
     loadDraftStore,
     loadPersistedAuth,
     loadSyncPostsStore,
     loadSyncState,
+    saveConnections,
     saveDraft,
     savePersistedAuth,
     saveSyncPostsStore,

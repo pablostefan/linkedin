@@ -97,11 +97,23 @@ Abra:
 5. Verifique o estado atual com `npm run linkedin:status`.
 6. Se seu app tiver `r_member_social` aprovado, atualize o `.env`, reautentique e use `npm run linkedin:posts:list` para testar a leitura de posts existentes.
 7. Crie um rascunho com `npm run linkedin:draft:create -- --content="Texto do post"`.
-8. Liste ou inspecione rascunhos com `npm run linkedin:draft:list` e `npm run linkedin:draft:show -- --draft-id=<uuid>`.
-9. Prepare a publicacao com `npm run linkedin:publish:prepare -- --draft-id=<uuid>`.
-10. Revise o JSON retornado, incluindo `confirmationId`, `content` e `expiresAt`.
-11. Confirme a publicacao com `npm run linkedin:publish:confirm -- --confirmation-id=<uuid>`.
-12. Consulte o historico local com `npm run linkedin:history:list`.
+8. Para mencionar uma pessoa, use um placeholder explicito no texto, por exemplo `@{Mateus Pereira}`, e passe `--mention-person-name="Mateus Pereira" --mention-person-urn="urn:li:person:abc123"`.
+9. Liste ou inspecione rascunhos com `npm run linkedin:draft:list` e `npm run linkedin:draft:show -- --draft-id=<uuid>`.
+10. Prepare a publicacao com `npm run linkedin:publish:prepare -- --draft-id=<uuid>`.
+11. Revise o JSON retornado, incluindo `confirmationId`, `content` e `expiresAt`.
+12. Confirme a publicacao com `npm run linkedin:publish:confirm -- --confirmation-id=<uuid>`.
+13. Consulte o historico local com `npm run linkedin:history:list`.
+
+Exemplo de draft com mention experimental:
+
+```bash
+npm run linkedin:draft:create -- \
+   --content="Teste com @{Mateus Pereira} no post." \
+   --mention-person-name="Mateus Pereira" \
+   --mention-person-urn="urn:li:person:abc123"
+```
+
+Essa funcionalidade usa o formato little text do LinkedIn no campo `commentary`. O projeto ainda nao resolve URNs de pessoas automaticamente a partir de URL de perfil.
 
 Todos os comandos imprimem JSON por padrao para facilitar o uso pelo Copilot no VS Code.
 

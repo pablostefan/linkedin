@@ -26,7 +26,9 @@
     "linkedin:sync:status": "node src/cli.js sync status",
     "linkedin:sync:list": "node src/cli.js sync list",
     "linkedin:sync:backfill": "node src/cli.js sync run --full-scan=true --max-scrolls=60",
-    "linkedin:sync:backfill:deep": "node src/cli.js sync run --full-scan=true --enrich-all=true --max-scrolls=60"
+    "linkedin:sync:backfill:deep": "node src/cli.js sync run --full-scan=true --enrich-all=true --max-scrolls=60",
+    "linkedin:connections:sync": "node src/cli.js connections sync",
+    "linkedin:connections:list": "node src/cli.js connections list"
   },
   "dependencies": {
     "dotenv": "^16.4.5",

@@ -306,6 +306,115 @@ test("draft create and update persist rich post options", async () => {
   }
 });
 
+test("draft create accepts person mention metadata when the placeholder is present", async () => {
+  const harness = await startTestServer();
+
+  try {
+    const createResponse = await fetch(`${harness.baseUrl}/operator/drafts`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        content: "Ola @{Mateus Pereira}, esse teste valida mention.",
+        postOptions: {
+          mentions: [
+            {
+              type: "person",
+              name: "Mateus Pereira",
+              urn: "urn:li:person:mateus123"
+            }
+          ]
+        }
+      })
+    });
+    const createdDraft = await createResponse.json();
+
+    assert.equal(createResponse.status, 201);
+    assert.deepEqual(createdDraft.postOptions, {
+      mentions: [
+        {
+          type: "person",
+          name: "Mateus Pereira",
+          urn: "urn:li:person:mateus123"
+        }
+      ]
+    });
+  } finally {
+    await harness.close();
+  }
+});
+
+test("draft create accepts member mention metadata when the placeholder is present", async () => {
+  const harness = await startTestServer();
+
+  try {
+    const createResponse = await fetch(`${harness.baseUrl}/operator/drafts`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        content: "Ola @{Mateus Pereira}, esse teste valida member mention.",
+        postOptions: {
+          mentions: [
+            {
+              type: "person",
+              name: "Mateus Pereira",
+              urn: "urn:li:member:123456789"
+            }
+          ]
+        }
+      })
+    });
+    const createdDraft = await createResponse.json();
+
+    assert.equal(createResponse.status, 201);
+    assert.deepEqual(createdDraft.postOptions, {
+      mentions: [
+        {
+          type: "person",
+          name: "Mateus Pereira",
+          urn: "urn:li:member:123456789"
+        }
+      ]
+    });
+  } finally {
+    await harness.close();
+  }
+});
+
+test("draft create rejects mention metadata when the placeholder is missing", async () => {
+  const harness = await startTestServer();
+
+  try {
+    const createResponse = await fetch(`${harness.baseUrl}/operator/drafts`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        content: "Ola Mateus Pereira, esse teste nao tem placeholder.",
+        postOptions: {
+          mentions: [
+            {
+              type: "person",
+              name: "Mateus Pereira",
+              urn: "urn:li:person:mateus123"
+            }
+          ]
+        }
+      })
+    });
+    const payload = await createResponse.json();
+
+    assert.equal(createResponse.status, 400);
+    assert.equal(payload.error, "mention_token_not_found");
+  } finally {
+    await harness.close();
+  }
+});
+
 test("draft create returns duplicate metadata when the content already exists in synced posts", async () => {
   const harness = await startTestServer();
 
@@ -626,6 +735,164 @@ test("publish confirm sends article metadata when draft includes preview fields"
         description: "Portfolio pessoal",
         thumbnailPath: null
       }
+    });
+  } finally {
+    await harness.close();
+  }
+});
+
+test("publish prepare renders person mentions into little text before confirmation", async () => {
+  let publishPayload = null;
+  const harness = await startTestServer({
+    linkedinOverrides: {
+      createPost: async (payload) => {
+        publishPayload = payload;
+        return { postId: "post-mention", payload: { ok: true } };
+      }
+    }
+  });
+  await writePersistedAuth(harness.config.authFilePath);
+
+  try {
+    const draftResponse = await fetch(`${harness.baseUrl}/operator/drafts`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        content: "Teste com @{Mateus Pereira} e link.",
+        postOptions: {
+          article: {
+            source: "https://pablostefan.com.br",
+            title: "Portfolio",
+            description: "Descricao"
+          },
+          mentions: [
+            {
+              type: "person",
+              name: "Mateus Pereira",
+              urn: "urn:li:person:mateus123"
+            }
+          ]
+        }
+      })
+    });
+    const draft = await draftResponse.json();
+
+    const prepareResponse = await fetch(`${harness.baseUrl}/operator/publish/prepare`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ draftId: draft.draftId })
+    });
+    const prepared = await prepareResponse.json();
+
+    const confirmResponse = await fetch(`${harness.baseUrl}/operator/publish/confirm`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ confirmationId: prepared.confirmationId, confirm: true })
+    });
+
+    assert.equal(prepareResponse.status, 201);
+    assert.equal(prepared.content, "Teste com @[Mateus Pereira](urn:li:person:mateus123) e link.");
+    assert.equal(confirmResponse.status, 201);
+    assert.equal(publishPayload.content, "Teste com @[Mateus Pereira](urn:li:person:mateus123) e link.");
+    assert.deepEqual(publishPayload.postOptions, {
+      article: {
+        source: "https://pablostefan.com.br",
+        title: "Portfolio",
+        description: "Descricao",
+        thumbnailPath: null
+      },
+      mentions: [
+        {
+          type: "person",
+          name: "Mateus Pereira",
+          urn: "urn:li:person:mateus123"
+        }
+      ]
+    });
+  } finally {
+    await harness.close();
+  }
+});
+
+test("publish prepare renders member mentions into little text before confirmation", async () => {
+  let publishPayload = null;
+  const harness = await startTestServer({
+    linkedinOverrides: {
+      createPost: async (payload) => {
+        publishPayload = payload;
+        return { postId: "post-member-mention", payload: { ok: true } };
+      }
+    }
+  });
+  await writePersistedAuth(harness.config.authFilePath);
+
+  try {
+    const draftResponse = await fetch(`${harness.baseUrl}/operator/drafts`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        content: "Teste com @{Mateus Pereira} e link.",
+        postOptions: {
+          article: {
+            source: "https://pablostefan.com.br",
+            title: "Portfolio",
+            description: "Descricao"
+          },
+          mentions: [
+            {
+              type: "person",
+              name: "Mateus Pereira",
+              urn: "urn:li:member:123456789"
+            }
+          ]
+        }
+      })
+    });
+    const draft = await draftResponse.json();
+
+    const prepareResponse = await fetch(`${harness.baseUrl}/operator/publish/prepare`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ draftId: draft.draftId })
+    });
+    const prepared = await prepareResponse.json();
+
+    const confirmResponse = await fetch(`${harness.baseUrl}/operator/publish/confirm`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ confirmationId: prepared.confirmationId, confirm: true })
+    });
+
+    assert.equal(prepareResponse.status, 201);
+    assert.equal(prepared.content, "Teste com @[Mateus Pereira](urn:li:member:123456789) e link.");
+    assert.equal(confirmResponse.status, 201);
+    assert.equal(publishPayload.content, "Teste com @[Mateus Pereira](urn:li:member:123456789) e link.");
+    assert.deepEqual(publishPayload.postOptions, {
+      article: {
+        source: "https://pablostefan.com.br",
+        title: "Portfolio",
+        description: "Descricao",
+        thumbnailPath: null
+      },
+      mentions: [
+        {
+          type: "person",
+          name: "Mateus Pereira",
+          urn: "urn:li:member:123456789"
+        }
+      ]
     });
   } finally {
     await harness.close();

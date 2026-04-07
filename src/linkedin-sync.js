@@ -1219,3 +1219,165 @@ export async function runLinkedinBrowserSync({
     }
   }
 }
+
+export async function resolvePersonUrnFromProfileUrl({
+  profileUrl,
+  appConfig = config,
+  headless = true,
+  timeoutMs = 30000
+} = {}) {
+  if (!profileUrl || typeof profileUrl !== "string") {
+    throw buildFailure("invalid_profile_url", "A URL do perfil LinkedIn e obrigatoria.");
+  }
+
+  let parsedUrl;
+
+  try {
+    parsedUrl = new URL(profileUrl);
+  } catch {
+    throw buildFailure("invalid_profile_url", `URL invalida: ${profileUrl}`);
+  }
+
+  if (
+    parsedUrl.hostname !== "www.linkedin.com" &&
+    parsedUrl.hostname !== "linkedin.com"
+  ) {
+    throw buildFailure("invalid_profile_url", `URL nao e do LinkedIn: ${profileUrl}`);
+  }
+
+  const pathMatch = parsedUrl.pathname.match(/^\/in\/([^/]+)/);
+
+  if (!pathMatch) {
+    throw buildFailure("invalid_profile_url", `URL nao e de perfil LinkedIn (/in/...): ${profileUrl}`);
+  }
+
+  let browserContext;
+
+  try {
+    const { chromium } = await import("playwright");
+
+    await fs.mkdir(appConfig.browserProfileDirPath, { recursive: true });
+
+    browserContext = await chromium.launchPersistentContext(appConfig.browserProfileDirPath, {
+      headless,
+      viewport: null,
+      args: [
+        `--window-size=${DEFAULT_BROWSER_WINDOW_WIDTH},${DEFAULT_BROWSER_WINDOW_HEIGHT}`,
+        "--window-position=40,40"
+      ]
+    });
+
+    const page = browserContext.pages()[0] || (await browserContext.newPage());
+
+    // Intercept network responses to capture urn:li:person: from LinkedIn API calls
+    const capturedUrns = new Map(); // urn -> Set of source URLs
+
+    page.on("response", async (response) => {
+      try {
+        const url = response.url();
+        if (!url.includes("linkedin.com")) return;
+        if (response.status() < 200 || response.status() >= 300) return;
+        const body = await response.text();
+        const normalized = body.replace(/%3A/gi, ":");
+        // Capture all LinkedIn URN formats
+        const urnRegex = /urn:li:(person|member|fsd_profile|fs_miniProfile):([A-Za-z0-9_-]+)/g;
+        for (const m of normalized.matchAll(urnRegex)) {
+          const urn = m[0];
+          if (!capturedUrns.has(urn)) capturedUrns.set(urn, new Set());
+          capturedUrns.get(urn).add(url.split("?")[0]);
+        }
+      } catch {
+        // Ignore responses that can't be read
+      }
+    });
+
+    await page.goto(profileUrl, {
+      waitUntil: "domcontentloaded",
+      timeout: timeoutMs
+    });
+    await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => {});
+    await page.waitForTimeout(2000);
+
+    if (await isLoginRequired(page)) {
+      throw buildFailure(
+        "browser_login_required",
+        "A sessao do LinkedIn no perfil persistente do navegador nao esta autenticada. Execute o sync sem headless, conclua o login manualmente no Chromium e tente novamente."
+      );
+    }
+
+    // Check network-captured URNs first
+    if (capturedUrns.size > 0) {
+      // Prefer urn:li:person: for REST Posts API mentions
+      const personUrns = [...capturedUrns.keys()].filter(u => u.startsWith("urn:li:person:"));
+      if (personUrns.length > 0) {
+        return {
+          personUrn: personUrns[0],
+          profileUrl,
+          resolvedFrom: "network_person",
+          allCaptured: Object.fromEntries([...capturedUrns.entries()].map(([k, v]) => [k, [...v]]))
+        };
+      }
+      // Return debug info about what was captured
+      const debugUrns = Object.fromEntries([...capturedUrns.entries()].map(([k, v]) => [k, [...v]]));
+      // Don't return yet — fall through to HTML parsing, but attach network debug info
+      var _networkDebug = debugUrns;
+    }
+
+    const pageContent = await page.content();
+
+    // LinkedIn may URL-encode URNs in the page (%3A instead of :)
+    const normalizedContent = pageContent.replace(/%3A/gi, ":");
+
+    // Prefer urn:li:person: (required for REST Posts API mentions)
+    const personMatch = normalizedContent.match(/urn:li:person:([A-Za-z0-9_-]+)/);
+
+    if (personMatch) {
+      return {
+        personUrn: personMatch[0],
+        profileUrl,
+        resolvedFrom: "person"
+      };
+    }
+
+    const fsdMatch = normalizedContent.match(/urn:li:fsd_profile:([A-Za-z0-9_-]+)/)
+      || normalizedContent.match(/fsd_profile:([A-Za-z0-9_-]+)/);
+
+    if (fsdMatch) {
+      const fsdId = fsdMatch[1];
+      const fsdBytes = Buffer.from(fsdId, "base64url");
+      if (fsdBytes.length >= 8) {
+        const numericMemberId = fsdBytes.readUInt32BE(4);
+        return {
+          personUrn: `urn:li:member:${numericMemberId}`,
+          profileUrl,
+          resolvedFrom: "fsd_profile",
+          ...(typeof _networkDebug !== "undefined" && { networkUrns: _networkDebug })
+        };
+      }
+      return {
+        personUrn: `urn:li:member:${fsdId}`,
+        profileUrl,
+        resolvedFrom: "fsd_profile"
+      };
+    }
+
+    const memberMatch = normalizedContent.match(/urn:li:member:([A-Za-z0-9_-]+)/);
+
+    if (memberMatch) {
+      return {
+        personUrn: memberMatch[0],
+        profileUrl,
+        resolvedFrom: "member"
+      };
+    }
+
+    throw buildFailure(
+      "urn_not_found",
+      `Nao foi possivel extrair o URN do perfil: ${profileUrl}. Verifique se o perfil existe e se a sessao do navegador esta autenticada.`
+    );
+  } finally {
+    if (browserContext) {
+      await browserContext.close();
+    }
+  }
+}

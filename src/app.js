@@ -10,7 +10,8 @@ import {
   exchangeCodeForToken,
   getUserInfo,
   listAuthorPosts,
-  personUrnFromUserInfo
+  personUrnFromUserInfo,
+  renderPostCommentary
 } from "./linkedin.js";
 import { DraftStoreCorruptedError, createLocalState } from "./local-state.js";
 
@@ -402,6 +403,8 @@ POST /logout</pre>
   }));
 
   app.post("/operator/drafts", asyncHandler(async (req, res) => {
+    renderPostCommentary(req.body?.content, req.body?.postOptions || null);
+
     const duplicateCheck = await findDuplicatePost(localState, req.body?.content);
     const draft = await localState.saveDraft({
       content: req.body?.content,
@@ -441,6 +444,8 @@ POST /logout</pre>
         message: `Draft ${req.params.draftId} was not found.`
       });
     }
+
+    renderPostCommentary(req.body?.content, req.body?.postOptions || null);
 
     const duplicateCheck = await findDuplicatePost(localState, req.body?.content);
     const draft = await localState.saveDraft({
@@ -482,6 +487,16 @@ POST /logout</pre>
     res.json({ entries });
   }));
 
+  app.post("/operator/resolve/person-urn", asyncHandler(async (req, res) => {
+    const url = req.body?.url;
+    if (!url || typeof url !== "string") {
+      return res.status(400).json({ error: "missing_field", message: "url is required." });
+    }
+    const { resolvePersonUrnFromProfileUrl } = await import("./linkedin-sync.js");
+    const result = await resolvePersonUrnFromProfileUrl({ profileUrl: url, appConfig: config });
+    res.json(result);
+  }));
+
   app.post("/operator/publish/prepare", asyncHandler(async (req, res) => {
     const authStatus = await localState.loadPersistedAuth();
 
@@ -509,7 +524,9 @@ POST /logout</pre>
       postOptions = draft.postOptions || null;
     }
 
-    const duplicateCheck = await findDuplicatePost(localState, content);
+    const preparedContent = renderPostCommentary(content, postOptions);
+
+    const duplicateCheck = await findDuplicatePost(localState, preparedContent);
 
     if (duplicateCheck.hasDuplicate && !allowDuplicate) {
       return res.status(409).json({
@@ -520,7 +537,11 @@ POST /logout</pre>
       });
     }
 
-    const intent = localState.createPublishIntent({ draftId, content, postOptions });
+    const intent = localState.createPublishIntent({
+      draftId,
+      content: preparedContent,
+      postOptions
+    });
 
     return res.status(201).json({
       ...intent,
@@ -686,6 +707,8 @@ POST /logout</pre>
       || error.code === "invalid_media_file"
       || error.code === "missing_media_file"
       || error.code === "image_upload_init_failed"
+      || error.code === "mention_token_not_found"
+      || error.code === "mention_token_ambiguous"
     ) {
       return res.status(400).json({
         error: error.code,

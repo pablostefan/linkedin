@@ -1,0 +1,348 @@
+plan_id: linkedin-person-mentions-research
+objective: >-
+  Pesquisar a viabilidade tecnica de adicionar suporte a mencoes de pessoas em
+  posts do LinkedIn neste projeto, considerando a documentacao oficial do
+  LinkedIn e o contexto atual do repositorio.
+focus_area: member-mentions
+created_at: "2026-04-07T00:00:00Z"
+created_by: GitHub Copilot GPT-5.4
+status: completed
+
+tldr: |
+  - A documentacao oficial atual do LinkedIn para Posts API define commentary como little text e a migration guide afirma que o modelo legado de attributed text com attributes foi achatado para um unico campo string; nao encontrei evidencia atual de payload create com commentary.attributes/start/length/value.person no endpoint /rest/posts.
+  - A sintaxe documental vigente para mencoes em posts e inline dentro de commentary, no formato little text, e a gramática oficial aceita MentionElement com Person URN ou Organization URN, por exemplo @[Nome](urn:li:person:1234).
+  - A Posts API tambem afirma que commentary pode mencionar organizations ou members, mas os exemplos oficiais capturados mostram apenas organization mention; nao encontrei exemplo oficial atual de post pessoal com author=urn:li:person e commentary contendo member mention real.
+  - O fluxo de publicacao self-serve do projeto ja cobre autor pessoa com w_member_social, mas o repositorio nao resolve person URN de terceiros, nao escapa little text e nao valida o match case-sensitive do nome exibido.
+  - A conclusao pratica continua sendo que a sintaxe mais provavel e little text inline, mas a confirmacao de mencoes pessoais reais em feed exige experimento controlado com token e URN validos.
+
+research_metadata:
+  methodology: >-
+    Pesquisa hibrida com leitura direta do repositorio, grep para contratos de
+    payload e escopos, e consulta a documentacao oficial do LinkedIn via
+    Microsoft Learn e LinkedIn Developers sobre Posts API, Post Schema, little
+    text, People Typeahead e tiers/permissoes de Community Management API.
+  scope: >-
+    Fluxo de publicacao de posts pessoais deste repositorio, escopos OAuth,
+    payload de criacao em /rest/posts, mencoes em commentary, descoberta de
+    Person URN para mencao e restricoes de produto/permissao relevantes.
+  confidence: medium
+  coverage: 90
+  decision_blockers: 1
+  research_blockers: 0
+
+files_analyzed:
+  - file: AGENTS.md
+    path: /Users/pablostefan/GitHub/linkedin/AGENTS.md
+    purpose: Define o workflow canonico e os limites operacionais do projeto.
+    key_elements:
+      - element: Post Workflow
+        type: pattern
+        location: AGENTS.md:31
+        description: Formaliza o fluxo draft -> prepare -> confirm -> history para posts pessoais.
+      - element: Constraints
+        type: pattern
+        location: AGENTS.md:45
+        description: Registra a limitacao conhecida de leitura de posts pessoais depender de r_member_social.
+    language: markdown
+    lines: 62
+  - file: README.md
+    path: /Users/pablostefan/GitHub/linkedin/README.md
+    purpose: Documenta requisitos de produto do LinkedIn, escopos e operacao do CLI.
+    key_elements:
+      - element: Configuracao da app no LinkedIn
+        type: pattern
+        location: README.md:22
+        description: Declara que o projeto publica no perfil pessoal com w_member_social.
+      - element: Para conseguir ler posts ja publicados
+        type: pattern
+        location: README.md:33
+        description: Explica que r_member_social e restrito e nao e assumido como disponivel.
+      - element: Fluxo canonico no VS Code com Copilot
+        type: pattern
+        location: README.md:72
+        description: Mostra o fluxo operacional usado hoje para publicar posts do perfil autenticado.
+    language: markdown
+    lines: 353
+  - file: src/config.js
+    path: /Users/pablostefan/GitHub/linkedin/src/config.js
+    purpose: Centraliza configuracao OAuth e escopos default do projeto.
+    key_elements:
+      - element: linkedinScopes
+        type: variable
+        location: src/config.js:31
+        description: Usa por padrao openid profile email w_member_social, sem qualquer escopo de mencao ou people lookup.
+    language: javascript
+    lines: 44
+  - file: src/linkedin.js
+    path: /Users/pablostefan/GitHub/linkedin/src/linkedin.js
+    purpose: Implementa a chamada REST para criacao e leitura de posts no LinkedIn.
+    key_elements:
+      - element: LINKEDIN_POSTS_URL
+        type: variable
+        location: src/linkedin.js:8
+        description: Usa diretamente o endpoint oficial https://api.linkedin.com/rest/posts.
+      - element: personUrnFromUserInfo
+        type: function
+        location: src/linkedin.js:68
+        description: Construi urn:li:person:{id} do usuario autenticado a partir do sub do userinfo.
+      - element: buildPostBody
+        type: function
+        location: src/linkedin.js:174
+        description: Monta payload com author, commentary, visibility, distribution e lifecycleState, sem campo estrutural separado para mentions.
+      - element: createPost
+        type: function
+        location: src/linkedin.js:211
+        description: Envia o payload do post para a Posts API mantendo commentary como string simples.
+      - element: listAuthorPosts
+        type: function
+        location: src/linkedin.js:267
+        description: Usa author=urn:li:person para leitura quando o app possuir permissao suficiente.
+    language: javascript
+    lines: 279
+  - file: src/app.js
+    path: /Users/pablostefan/GitHub/linkedin/src/app.js
+    purpose: Orquestra confirmacao de publicacao e repassa o payload do draft para a API do LinkedIn.
+    key_elements:
+      - element: publish confirm handler
+        type: pattern
+        location: src/app.js:548
+        description: Publica com authorUrn do usuario autenticado e content do draft, sem etapa de resolucao de mentions.
+      - element: auth/session persistence
+        type: pattern
+        location: src/app.js:146
+        description: Mantem personUrn e scope da sessao autenticada, mas nao persiste metadados de pessoas mencionaveis.
+    language: javascript
+    lines: 725
+
+patterns_found:
+  - category: architecture
+    pattern: Publicacao pessoal usa author Person URN obtido do proprio login OAuth.
+    description: O projeto foi desenhado para postar no perfil autenticado usando w_member_social e urn:li:person do proprio usuario.
+    examples:
+      - file: src/linkedin.js
+        location: src/linkedin.js:68
+        snippet: "return `urn:li:person:${userInfo.sub}`;"
+      - file: src/linkedin.js
+        location: src/linkedin.js:176
+        snippet: 'author: authorUrn, commentary: content'
+    prevalence: common
+  - category: structure
+    pattern: O payload de criacao do post espelha quase literalmente o schema minimo da Posts API.
+    description: O projeto usa commentary em texto direto e nao modela attributes, entity ranges ou metadados de mention em estrutura separada.
+    examples:
+      - file: src/linkedin.js
+        location: src/linkedin.js:174
+        snippet: 'const body = { author: authorUrn, commentary: content, visibility, distribution: { feedDistribution: "MAIN_FEED", targetEntities: [], thirdPartyDistributionChannels: [] }, lifecycleState: "PUBLISHED", isReshareDisabledByAuthor: false };'
+    prevalence: common
+  - category: naming
+    pattern: Escopos do LinkedIn sao controlados centralmente em configuracao e README.
+    description: O repositorio deixa explicito quando um fluxo depende de permissao restrita, como r_member_social, e nao presume liberacao automatica.
+    examples:
+      - file: src/config.js
+        location: src/config.js:31
+        snippet: 'linkedinScopes: (process.env.LINKEDIN_SCOPES || "openid profile email w_member_social")'
+      - file: README.md
+        location: README.md:33
+        snippet: 'Voce precisa que o LinkedIn aprove o escopo restrito r_member_social para a sua app.'
+    prevalence: common
+  - category: architecture
+    pattern: Nao ha mecanismo interno para descobrir ou validar Person URN de terceiros antes da publicacao.
+    description: O projeto nao integra busca de pessoas, lookup de vanity URL ou qualquer etapa preparatoria para mencoes reais.
+    examples:
+      - file: src/linkedin.js
+        location: src/linkedin.js:1
+        snippet: 'Modulo contem auth, posts e upload de imagem, sem endpoint auxiliar de lookup de membros.'
+      - file: src/app.js
+        location: src/app.js:548
+        snippet: 'publish confirm envia intent.content diretamente para createPost.'
+    prevalence: common
+
+related_architecture:
+  components_relevant_to_domain:
+    - component: src/config.js
+      responsibility: Define produto/versao/escopos usados nas chamadas LinkedIn.
+      location: /Users/pablostefan/GitHub/linkedin/src/config.js
+      relationship_to_domain: domain depends on this
+    - component: src/linkedin.js
+      responsibility: Encapsula auth, posts API e upload de midia.
+      location: /Users/pablostefan/GitHub/linkedin/src/linkedin.js
+      relationship_to_domain: domain depends on this
+    - component: src/app.js
+      responsibility: Faz prepare/confirm e publica com o token persistido.
+      location: /Users/pablostefan/GitHub/linkedin/src/app.js
+      relationship_to_domain: this uses domain outputs
+    - component: local auth store
+      responsibility: Persiste scope, accessToken e personUrn do usuario autenticado.
+      location: /Users/pablostefan/GitHub/linkedin/.local/linkedin/auth.json
+      relationship_to_domain: domain depends on this
+  interfaces_used_by_domain:
+    - interface: LinkedIn REST Posts API
+      location: https://api.linkedin.com/rest/posts
+      usage_pattern: POST para criar posts pessoais; GET finder para listar posts do author quando houver permissao.
+    - interface: LinkedIn OpenID userinfo
+      location: https://api.linkedin.com/v2/userinfo
+      usage_pattern: Le o sub para montar person URN do proprio autor.
+  data_flow_involving_domain: >-
+    O usuario autentica via OpenID, o projeto persiste accessToken/scope/personUrn,
+    cria um draft local com content textual e, na confirmacao, envia esse content
+    como commentary para /rest/posts. Hoje nao existe etapa entre draft e publish
+    para resolver person URNs de terceiros nem para transformar texto comum em
+    little text escapado/validado.
+  key_relationships_to_domain:
+    - from: src/app.js
+      to: src/linkedin.js
+      relationship: calls
+    - from: src/config.js
+      to: src/linkedin.js
+      relationship: imports
+    - from: README.md
+      to: src/config.js
+      relationship: documents
+
+related_technology_stack:
+  languages_used_in_domain:
+    - JavaScript
+    - Markdown
+    - YAML
+  frameworks_used_in_domain:
+    - name: Express
+      usage_in_domain: Exposicao dos endpoints locais operator/auth/publish.
+    - name: Node.js Fetch API
+      usage_in_domain: Chamada direta aos endpoints OAuth e REST do LinkedIn.
+  libraries_used_in_domain:
+    - name: dotenv
+      purpose_in_domain: Carrega configuracao de escopos e segredos da app.
+    - name: Playwright
+      purpose_in_domain: Usado no sync manual por navegador, nao em mencoes API.
+  external_apis_used_in_domain:
+    - name: LinkedIn Posts API
+      integration_point: src/linkedin.js
+    - name: LinkedIn OpenID Connect UserInfo
+      integration_point: src/linkedin.js
+
+related_conventions:
+  naming_patterns_in_domain: >-
+    Uso consistente de personUrn, authorUrn, postOptions e linkedinScopes para
+    refletir nomenclatura oficial da API.
+  structure_of_domain: >-
+    O repositorio separa configuracao, adaptador LinkedIn e orquestracao HTTP
+    local; drafts e historico ficam fora do adaptador remoto.
+  error_handling_in_domain: >-
+    Erros HTTP do LinkedIn sao propagados com status/payload; 401 invalida auth
+    persistida; nao ha erros especificos para falha de resolucao de mencoes porque
+    esse fluxo nao existe.
+  testing_in_domain: >-
+    Ha testes para auth/publicacao geral, mas nao existe cobertura dedicada a
+    little text, mention escaping ou resolucao de Person URN.
+  documentation_in_domain: >-
+    README e instrucoes do workspace documentam claramente a diferenca entre
+    permissoes basicas de escrita e permissoes restritas de leitura.
+
+related_dependencies:
+  internal:
+    - component: src/config.js
+      relationship_to_domain: Fornece escopos e versao de API para publicacao.
+      direction: outbound
+    - component: src/app.js
+      relationship_to_domain: Envia o draft aprovado para o adaptador LinkedIn.
+      direction: outbound
+    - component: README.md
+      relationship_to_domain: Documenta os pre-requisitos de produto/permissao usados pelo dominio.
+      direction: bidirectional
+  external:
+    - name: Community Management API
+      purpose_for_domain: Produto que concede w_member_social e demais permissoes sociais.
+    - name: Posts API
+      purpose_for_domain: Endpoint de criacao e leitura de posts com commentary em little text.
+    - name: People Typeahead API
+      purpose_for_domain: Descoberta oficial de person URN para member mention, mas orientada a organization followers e restrita.
+
+domain_security_considerations:
+  sensitive_areas:
+    - area: Descoberta e uso de member data para mencoes
+      location: People Typeahead API and restricted-use documentation
+      concern: Dados de membros possuem restricoes de uso, exibicao e retencao; fluxo de mencoes nao pode virar base local de perfis.
+    - area: Persistencia local de auth
+      location: /Users/pablostefan/GitHub/linkedin/.local/linkedin/auth.json
+      concern: O token autenticado para postar em nome do membro precisa manter escopo minimo e tratamento de invalidacao.
+  authentication_patterns_in_domain: >-
+    OAuth 2.0 com OpenID Connect e token de membro persistido localmente; o
+    projeto ja opera com w_member_social para escrita em perfil pessoal.
+  authorization_patterns_in_domain: >-
+    Escopos sao a principal fronteira de autorizacao; para mencoes de pessoas a
+    documentacao oficial relevante acrescenta r_organization_followers no fluxo de
+    descoberta, o que nao se aplica ao setup atual de perfil pessoal.
+  data_validation_in_domain: >-
+    O projeto valida formato de draft e midia, mas nao valida little text,
+    caracteres reservados nem aderencia do texto ao nome exato exigido para a
+    conversao da mencao em link.
+
+testing_patterns:
+  framework: node:test
+  coverage_areas:
+    - fluxo geral de auth
+    - criacao e confirmacao de publicacao
+    - sync e armazenamento local
+  test_organization: Testes concentrados em test/app.test.js e test/linkedin-sync.test.js.
+  mock_patterns:
+    - Stubs de API LinkedIn e estado local para validar fluxo HTTP local.
+    - Nao ha fixtures ou asserts de payload little text com mentions.
+
+open_questions:
+  - question: >-
+      Um post pessoal criado com w_member_social e commentary contendo
+      @[Nome](urn:li:person:...) converte a mencao em link real no feed sem usar
+      People Typeahead?
+    context: >-
+      A Posts API e little text dizem que members podem ser mencionados em
+      commentary, mas os exemplos oficiais capturados mostram somente organization
+      mention e a documentacao de descoberta de membros para mencao e centrada em
+      paginas de organizacao e followers.
+    type: decision_blocker
+    affects:
+      - mentions-personal-posts
+  - question: >-
+      Existe algum endpoint self-serve documentado para resolver person URN de
+      terceiros em contexto de perfil pessoal, sem r_organization_followers?
+    context: >-
+      A documentacao capturada nao apresenta fluxo equivalente ao People
+      Typeahead para membros autenticados publicando no proprio perfil.
+    type: research
+    affects:
+      - mentions-personal-posts
+  - question: >-
+      A API aceita member mention por vanity URL previamente conhecida ou exige
+      obrigatoriamente person URN exata do terceiro?
+    context: >-
+      little text e Posts API mostram sintaxe com URN, mas nao documentam atalho
+      self-serve para perfil pessoal converter vanity URL em person URN.
+    type: research
+    affects:
+      - mentions-personal-posts
+
+gaps:
+  - area: Fluxo oficial self-serve para descoberta de pessoa mencionavel em post pessoal
+    description: >-
+      A documentacao oficial coletada descreve member mention em commentary, mas
+      nao fecha ponta a ponta como um app de perfil pessoal, em tier self-serve,
+      obtém com legitimidade a person URN do terceiro a ser mencionado.
+    impact: decision_blocker
+    affects:
+      - mentions-personal-posts
+  - area: Comportamento real de rendering/link conversion para member mention em author person
+    description: >-
+      Nao ha exemplo oficial capturado de create post com author=urn:li:person e
+      commentary contendo @[Pessoa](urn:li:person:...), nem evidencia documental
+      atual de acceptance explicita do formato legado commentary + attributes no
+      endpoint /rest/posts.
+    impact: research_blocker
+    affects:
+      - mentions-personal-posts
+  - area: Tratamento de little text no repositorio
+    description: >-
+      O projeto nao possui escape de caracteres reservados, validacao de nomes
+      case sensitive, lookup de third-party person URN nem testes dedicados a
+      mention payloads.
+    impact: nice_to_know
+    affects:
+      - mentions-personal-posts

@@ -28,7 +28,7 @@ export const config = {
   linkedinClientSecret: requireEnv("LINKEDIN_CLIENT_SECRET"),
   linkedinRedirectUri: process.env.LINKEDIN_REDIRECT_URI || "http://localhost:3901/auth/linkedin/callback",
   linkedinApiVersion: process.env.LINKEDIN_API_VERSION || "202504",
-  linkedinScopes: (process.env.LINKEDIN_SCOPES || "openid profile email w_member_social")
+  linkedinScopes: (process.env.LINKEDIN_SCOPES || "openid profile email w_member_social r_1st_connections")
     .split(/\s+/)
     .filter(Boolean),
   linkedinSyncStartUrl: process.env.LINKEDIN_SYNC_START_URL || "https://www.linkedin.com/in/me/recent-activity/all/",
@@ -41,5 +41,6 @@ export const config = {
   syncPostsFilePath: path.resolve(currentDirPath, "../.local/linkedin/sync/posts.json"),
   syncStateFilePath: path.resolve(currentDirPath, "../.local/linkedin/sync/state.json"),
   publishHistoryFilePath: path.resolve(currentDirPath, "../.local/linkedin/publish-history.jsonl"),
+  connectionsFilePath: path.resolve(currentDirPath, "../.local/linkedin/connections.json"),
   publishIntentTtlMs: Number(process.env.PUBLISH_INTENT_TTL_MS || 10 * 60 * 1000)
 };
