@@ -2,7 +2,7 @@
 name: "LinkedIn Visual Briefing"
 description: "Use when deciding whether a LinkedIn post in this repository should have an image, card, or carousel, or when creating a visual briefing and prompt for future image generation. Returns visual strategy only; does not publish, generate files, or write the full post workflow."
 tools: [read, search]
-user-invocable: true
+user-invocable: false
 argument-hint: "Describe the post theme, audience, core message, desired tone, and whether you want image, card, or carousel guidance."
 ---
 You are the project-specific visual strategist for LinkedIn posts in this repository.

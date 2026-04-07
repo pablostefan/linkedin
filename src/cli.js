@@ -125,6 +125,39 @@ function resolveStringFlag(flags, name) {
   return value === undefined ? undefined : String(value);
 }
 
+function resolvePostOptions(flags) {
+  const articleSource = resolveStringFlag(flags, "article-source");
+  const articleTitle = resolveStringFlag(flags, "article-title");
+  const articleDescription = resolveStringFlag(flags, "article-description");
+  const articleThumbnailPath = resolveStringFlag(flags, "article-thumbnail-path");
+  const imagePath = resolveStringFlag(flags, "image-path");
+  const imageAlt = resolveStringFlag(flags, "image-alt");
+
+  const hasArticle = [articleSource, articleTitle, articleDescription, articleThumbnailPath].some(Boolean);
+  const hasImage = [imagePath, imageAlt].some(Boolean);
+
+  if (!hasArticle && !hasImage) {
+    return undefined;
+  }
+
+  return {
+    article: hasArticle
+      ? {
+          source: articleSource,
+          title: articleTitle,
+          description: articleDescription,
+          thumbnailPath: articleThumbnailPath
+        }
+      : undefined,
+    image: hasImage
+      ? {
+          path: imagePath,
+          altText: imageAlt
+        }
+      : undefined
+  };
+}
+
 async function main() {
   const [domain, action, ...rest] = process.argv.slice(2);
   const { flags, positionals } = parseArgs(rest);
@@ -210,7 +243,8 @@ async function main() {
       result = await requestJson("GET", `/posts${count}`);
     } else if (domain === "draft" && action === "create") {
       result = await requestJson("POST", "/operator/drafts", {
-        content: resolveContent(flags)
+        content: resolveContent(flags),
+        postOptions: resolvePostOptions(flags)
       });
     } else if (domain === "draft" && action === "list") {
       result = await requestJson("GET", "/operator/drafts");
@@ -218,7 +252,8 @@ async function main() {
       result = await requestJson("GET", `/operator/drafts/${resolveDraftId(positionals, flags)}`);
     } else if (domain === "draft" && action === "update") {
       result = await requestJson("PATCH", `/operator/drafts/${resolveDraftId(positionals, flags)}`, {
-        content: resolveContent(flags)
+        content: resolveContent(flags),
+        postOptions: resolvePostOptions(flags)
       });
     } else if (domain === "draft" && action === "delete") {
       result = await requestJson("DELETE", `/operator/drafts/${resolveDraftId(positionals, flags)}`);
@@ -226,7 +261,8 @@ async function main() {
       result = await requestJson("POST", "/operator/publish/prepare", {
         draftId: flags["draft-id"] || null,
         content: resolveContent(flags),
-        allowDuplicate: resolveBooleanFlag(flags, "allow-duplicate", false)
+        allowDuplicate: resolveBooleanFlag(flags, "allow-duplicate", false),
+        postOptions: resolvePostOptions(flags)
       });
     } else if (domain === "publish" && action === "confirm") {
       result = await requestJson("POST", "/operator/publish/confirm", {

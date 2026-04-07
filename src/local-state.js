@@ -36,6 +36,71 @@ function sortDraftsByUpdatedAt(drafts) {
   });
 }
 
+function normalizeOptionalString(value) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalizedValue = value.trim();
+  return normalizedValue ? normalizedValue : null;
+}
+
+function normalizePostOptions(postOptions, errorCode) {
+  if (!postOptions || typeof postOptions !== "object") {
+    return null;
+  }
+
+  const articleSource = normalizeOptionalString(postOptions.article?.source);
+  const articleTitle = normalizeOptionalString(postOptions.article?.title);
+  const articleDescription = normalizeOptionalString(postOptions.article?.description);
+  const articleThumbnailPath = normalizeOptionalString(postOptions.article?.thumbnailPath);
+  const imagePath = normalizeOptionalString(postOptions.image?.path);
+  const imageAltText = normalizeOptionalString(postOptions.image?.altText);
+
+  const hasArticle = [articleSource, articleTitle, articleDescription, articleThumbnailPath].some(Boolean);
+  const hasImage = [imagePath, imageAltText].some(Boolean);
+
+  if (!hasArticle && !hasImage) {
+    return null;
+  }
+
+  if (hasArticle && hasImage) {
+    const error = new Error("Article preview and single image are mutually exclusive in this workflow.");
+    error.code = errorCode;
+    throw error;
+  }
+
+  if (hasArticle) {
+    if (!articleSource || !articleTitle || !articleDescription) {
+      const error = new Error("Article posts require source, title, and description.");
+      error.code = errorCode;
+      throw error;
+    }
+
+    return {
+      article: {
+        source: articleSource,
+        title: articleTitle,
+        description: articleDescription,
+        thumbnailPath: articleThumbnailPath
+      }
+    };
+  }
+
+  if (!imagePath) {
+    const error = new Error("Image posts require image.path.");
+    error.code = errorCode;
+    throw error;
+  }
+
+  return {
+    image: {
+      path: imagePath,
+      altText: imageAltText
+    }
+  };
+}
+
 async function readUtf8File(filePath) {
   try {
     return await fs.readFile(filePath, "utf8");
@@ -286,7 +351,7 @@ export function createLocalState(appConfig) {
     return store.drafts[draftId] || null;
   }
 
-  async function saveDraft({ draftId, content }) {
+  async function saveDraft({ draftId, content, postOptions }) {
     const normalizedContent = typeof content === "string" ? content.trim() : "";
 
     if (!normalizedContent) {
@@ -294,6 +359,8 @@ export function createLocalState(appConfig) {
       error.code = "invalid_draft_content";
       throw error;
     }
+
+    const normalizedPostOptions = normalizePostOptions(postOptions, "invalid_draft_post_options");
 
     const store = await loadDraftStore();
     const existingDraft = draftId ? store.drafts[draftId] : null;
@@ -303,6 +370,7 @@ export function createLocalState(appConfig) {
     const nextDraft = {
       draftId: nextDraftId,
       content: normalizedContent,
+      postOptions: normalizedPostOptions,
       createdAt: existingDraft?.createdAt || now,
       updatedAt: now
     };
@@ -368,7 +436,7 @@ export function createLocalState(appConfig) {
     }
   }
 
-  function createPublishIntent({ draftId = null, content }) {
+  function createPublishIntent({ draftId = null, content, postOptions }) {
     const normalizedContent = typeof content === "string" ? content.trim() : "";
 
     if (!normalizedContent) {
@@ -377,12 +445,15 @@ export function createLocalState(appConfig) {
       throw error;
     }
 
+    const normalizedPostOptions = normalizePostOptions(postOptions, "invalid_publish_post_options");
+
     const now = Date.now();
     const confirmationId = crypto.randomUUID();
     const intent = {
       confirmationId,
       draftId,
       content: normalizedContent,
+      postOptions: normalizedPostOptions,
       createdAt: new Date(now).toISOString(),
       expiresAt: new Date(now + appConfig.publishIntentTtlMs).toISOString(),
       consumedAt: null
@@ -395,6 +466,7 @@ export function createLocalState(appConfig) {
       confirmationId: intent.confirmationId,
       draftId: intent.draftId,
       content: intent.content,
+      postOptions: intent.postOptions,
       expiresAt: intent.expiresAt
     };
   }

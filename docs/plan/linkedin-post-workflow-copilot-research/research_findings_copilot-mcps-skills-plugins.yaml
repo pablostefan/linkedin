@@ -1,0 +1,452 @@
+plan_id: linkedin-post-workflow-copilot-research
+objective: >-
+  Pesquisar oportunidades para melhorar a criacao de posts de LinkedIn neste
+  repositorio, com foco em MCPs, skills e plugins ja disponiveis ou facilmente
+  integraveis no ambiente do GitHub Copilot e VS Code.
+focus_area: copilot-mcps-skills-plugins
+created_at: "2026-04-07T00:00:00Z"
+created_by: GitHub Copilot GPT-5.4
+status: completed
+
+tldr: |
+  - O repositorio ja possui uma arquitetura madura de agentes para entrevista, critica editorial, voz, formato, duplicidade e operacao de publicacao.
+  - O codigo operacional ja implementa bloqueio de duplicata exata e aviso por similaridade com base no sync local, entao a maior oportunidade nao e "mais um agente", e sim melhorar contexto estruturado e verificacao.
+  - O ambiente do VS Code/Copilot ja suporta agentes customizados, handoffs, skills, plugins e MCP servers; isso reduz bastante o custo de adocao incremental.
+  - Nao ha skills locais no repositorio nem MCP workspace dedicado ao dominio LinkedIn; as lacunas principais sao factual grounding, melhor uso do sync como contexto e menor dependencia de agentes externos nao versionados aqui.
+  - MCPs e skills com melhor encaixe imediato: Doublecheck, browser/Playwright MCP, Context7, GitHub search/grep e handoffs mais fortes entre os agentes existentes.
+
+research_metadata:
+  methodology: >-
+    Hybrid retrieval com leitura direta de arquivos do repositorio, grep para
+    localizar contratos de duplicidade/publicacao, leitura de skills locais do
+    ambiente do usuario e consulta a documentacao oficial do VS Code para
+    custom agents, skills, plugins e MCP servers.
+  scope: >-
+    Fluxo de criacao, revisao, formato, duplicidade e publicacao; arquitetura de
+    agentes do repo; ferramentas de customizacao e MCP do VS Code/Copilot; skills
+    locais relevantes ao dominio editorial e operacional.
+  confidence: high
+  coverage: 88
+  decision_blockers: 1
+  research_blockers: 0
+
+files_analyzed:
+  - file: AGENTS.md
+    path: /Users/pablostefan/GitHub/linkedin/AGENTS.md
+    purpose: Define a arquitetura de agentes e o workflow canonico do produto.
+    key_elements:
+      - element: Specialist Agents table
+        type: pattern
+        location: AGENTS.md:7
+        description: Separa claramente entrevista, critica, voz, formato, duplicidade e operacao CLI.
+      - element: Post Workflow
+        type: pattern
+        location: AGENTS.md:24
+        description: Formaliza o fluxo draft -> prepare -> confirm -> history.
+    language: markdown
+    lines: 57
+  - file: .github/instructions/linkedin-editorial-guidelines.instructions.md
+    path: /Users/pablostefan/GitHub/linkedin/.github/instructions/linkedin-editorial-guidelines.instructions.md
+    purpose: Centraliza heuristicas editoriais para posts tecnicos e pessoais.
+    key_elements:
+      - element: Technical Posts
+        type: pattern
+        location: .github/instructions/linkedin-editorial-guidelines.instructions.md:12
+        description: Exige problema, insight, decisao ou resultado logo no inicio.
+      - element: Anti-Patterns
+        type: pattern
+        location: .github/instructions/linkedin-editorial-guidelines.instructions.md:25
+        description: Proibe engagement bait, hashtags excessivas e filler corporativo.
+    language: markdown
+    lines: 42
+  - file: .github/agents/linkedin-publishing-orchestrator.agent.md
+    path: /Users/pablostefan/GitHub/linkedin/.github/agents/linkedin-publishing-orchestrator.agent.md
+    purpose: Roteia o fluxo entre agentes especializados sem executar tarefas diretamente.
+    key_elements:
+      - element: Workflow (Routing Sequence)
+        type: pattern
+        location: .github/agents/linkedin-publishing-orchestrator.agent.md:25
+        description: Encadeia clarification, copy, voice, editorial, format, duplicate e publish.
+      - element: agents frontmatter
+        type: pattern
+        location: .github/agents/linkedin-publishing-orchestrator.agent.md:1
+        description: Declara subagentes internos e externos, incluindo reepl-linkedin e gem-critic.
+    language: markdown
+    lines: 96
+  - file: .github/agents/linkedin-draft-manager.agent.md
+    path: /Users/pablostefan/GitHub/linkedin/.github/agents/linkedin-draft-manager.agent.md
+    purpose: Formaliza a operacao segura do CLI com auth, prepare e confirm.
+    key_elements:
+      - element: Required Operational Sequence
+        type: pattern
+        location: .github/agents/linkedin-draft-manager.agent.md:23
+        description: Impoe a sequencia server -> auth -> draft -> inspect -> prepare -> confirm -> history.
+      - element: Safety Rules
+        type: pattern
+        location: .github/agents/linkedin-draft-manager.agent.md:51
+        description: Proibe publish direto e exige confirmacao explicita do usuario.
+    language: markdown
+    lines: 93
+  - file: .github/agents/linkedin-duplicate-guard.agent.md
+    path: /Users/pablostefan/GitHub/linkedin/.github/agents/linkedin-duplicate-guard.agent.md
+    purpose: Define a politica de analise de duplicidade e repeticao de angulo.
+    key_elements:
+      - element: What You Check
+        type: pattern
+        location: .github/agents/linkedin-duplicate-guard.agent.md:14
+        description: Diferencia exact duplicate, thematic overlap, angle repetition e hook repetition.
+    language: markdown
+    lines: 79
+  - file: .github/agents/linkedin-post-critic.agent.md
+    path: /Users/pablostefan/GitHub/linkedin/.github/agents/linkedin-post-critic.agent.md
+    purpose: Faz revisao editorial especializada.
+    key_elements:
+      - element: What You Review
+        type: pattern
+        location: .github/agents/linkedin-post-critic.agent.md:11
+        description: Cobra hook, clareza, valor pratico, CTA, formato e fidelidade de revisao.
+    language: markdown
+    lines: 59
+  - file: .github/agents/linkedin-voice-validator.agent.md
+    path: /Users/pablostefan/GitHub/linkedin/.github/agents/linkedin-voice-validator.agent.md
+    purpose: Garante aderencia a voz do autor.
+    key_elements:
+      - element: Hard Rules
+        type: pattern
+        location: .github/agents/linkedin-voice-validator.agent.md:13
+        description: Proibe emojis, travessao longo, filler corporativo, engagement bait e buzzword stacking.
+    language: markdown
+    lines: 94
+  - file: .github/agents/linkedin-format-strategist.agent.md
+    path: /Users/pablostefan/GitHub/linkedin/.github/agents/linkedin-format-strategist.agent.md
+    purpose: Decide entre texto, article preview e single image.
+    key_elements:
+      - element: Decision Rules
+        type: pattern
+        location: .github/agents/linkedin-format-strategist.agent.md:17
+        description: Define criterios objetivos para cada formato suportado pela API/CLI.
+    language: markdown
+    lines: 82
+  - file: .github/agents/linkedin-visual-briefing.agent.md
+    path: /Users/pablostefan/GitHub/linkedin/.github/agents/linkedin-visual-briefing.agent.md
+    purpose: Decide se vale visual e retorna briefing reutilizavel.
+    key_elements:
+      - element: Decision Rules
+        type: pattern
+        location: .github/agents/linkedin-visual-briefing.agent.md:17
+        description: Recomenda text_only, single_image ou carousel com foco em compreensao.
+    language: markdown
+    lines: 56
+  - file: src/app.js
+    path: /Users/pablostefan/GitHub/linkedin/src/app.js
+    purpose: Implementa endpoints operadores, deteccao de duplicidade e o fluxo server-side de prepare/confirm.
+    key_elements:
+      - element: calculateTextSimilarity
+        type: function
+        location: src/app.js:38
+        description: Calcula similaridade lexical por sobreposicao de tokens.
+      - element: findDuplicatePost
+        type: function
+        location: src/app.js:86
+        description: Usa posts sincronizados para detectar duplicata exata e similaridade.
+      - element: POST /operator/drafts
+        type: pattern
+        location: src/app.js:404
+        description: Anexa duplicateCheck e warning ao salvar rascunhos.
+      - element: POST /operator/publish/prepare
+        type: pattern
+        location: src/app.js:485
+        description: Bloqueia duplicate_post_detected salvo override explicito.
+    language: javascript
+    lines: 725
+  - file: src/cli.js
+    path: /Users/pablostefan/GitHub/linkedin/src/cli.js
+    purpose: Expoe o workflow local em comandos JSON-friendly para o Copilot.
+    key_elements:
+      - element: resolvePostOptions
+        type: function
+        location: src/cli.js:94
+        description: Traduz flags de article/image para o payload do operador.
+      - element: domain router
+        type: pattern
+        location: src/cli.js:126
+        description: Centraliza auth, draft, publish, history e sync na mesma interface CLI.
+    language: javascript
+    lines: 321
+  - file: src/local-state.js
+    path: /Users/pablostefan/GitHub/linkedin/src/local-state.js
+    purpose: Persiste auth, drafts, history e sync store local.
+    key_elements:
+      - element: normalizePostOptions
+        type: function
+        location: src/local-state.js:37
+        description: Valida exclusao mutua entre article preview e single image.
+      - element: SyncStoreCorruptedError
+        type: class
+        location: src/local-state.js:18
+        description: Explicita integridade do store de sync como preocupacao operacional.
+    language: javascript
+    lines: 541
+  - file: src/linkedin-sync.js
+    path: /Users/pablostefan/GitHub/linkedin/src/linkedin-sync.js
+    purpose: Faz sincronizacao via navegador e produz a base local usada para checagem de duplicidade.
+    key_elements:
+      - element: buildPostKey
+        type: function
+        location: src/linkedin-sync.js:213
+        description: Gera chave canonica do post a partir de URL/URN/conteudo.
+      - element: normalizeMetricCount
+        type: function
+        location: src/linkedin-sync.js:43
+        description: Normaliza metricas visiveis do LinkedIn em contagens numericas.
+    language: javascript
+    lines: 1220
+  - file: README.md
+    path: /Users/pablostefan/GitHub/linkedin/README.md
+    purpose: Documenta o fluxo local, limitacoes da API e o sync por navegador.
+    key_elements:
+      - element: Fluxo canonico no VS Code com Copilot
+        type: pattern
+        location: README.md:72
+        description: Descreve o comportamento esperado do Copilot no fluxo de publicacao.
+      - element: Sincronizacao manual via navegador
+        type: pattern
+        location: README.md:135
+        description: Mostra que posts sincronizados ja sao uma fonte operacional relevante.
+    language: markdown
+    lines: 353
+
+patterns_found:
+  - category: architecture
+    pattern: Agentes especializados com orquestrador fino
+    description: O repositorio usa um orquestrador que delega fases do fluxo em vez de concentrar logica num unico agente.
+    examples:
+      - file: .github/agents/linkedin-publishing-orchestrator.agent.md
+        location: .github/agents/linkedin-publishing-orchestrator.agent.md:25
+        snippet: "Phase 1..8 roteia interviewer, critic, voice, format, duplicate e draft manager."
+      - file: AGENTS.md
+        location: AGENTS.md:7
+        snippet: "Tabela de agentes especialistas com responsabilidade unica."
+    prevalence: common
+  - category: structure
+    pattern: Draft-first com two-step publish
+    description: O fluxo operacional evita publicacao direta e usa prepare/confirm como barreira de seguranca.
+    examples:
+      - file: .github/agents/linkedin-draft-manager.agent.md
+        location: .github/agents/linkedin-draft-manager.agent.md:23
+        snippet: "Sempre seguir esta ordem exata... preparar... mostrar... solicitar confirmacao explicita."
+      - file: src/app.js
+        location: src/app.js:389
+        snippet: "direct_publish_disabled"
+    prevalence: common
+  - category: error_handling
+    pattern: Duplicidade operacional baseada em sync local
+    description: A camada de aplicacao ja bloqueia duplicata exata e emite aviso de similaridade antes da publicacao.
+    examples:
+      - file: src/app.js
+        location: src/app.js:86
+        snippet: "findDuplicatePost(localState, content)"
+      - file: src/app.js
+        location: src/app.js:514
+        snippet: "if (duplicateCheck.hasDuplicate && !allowDuplicate)"
+    prevalence: common
+  - category: naming
+    pattern: Agentes e instrucoes nomeados pelo papel de negocio
+    description: Os nomes dos agentes e instrucoes descrevem a funcao editorial/operacional, nao a tecnologia usada.
+    examples:
+      - file: .github/agents/linkedin-post-critic.agent.md
+        location: .github/agents/linkedin-post-critic.agent.md:1
+        snippet: "LinkedIn Post Critic"
+      - file: .github/instructions/linkedin-editorial-guidelines.instructions.md
+        location: .github/instructions/linkedin-editorial-guidelines.instructions.md:1
+        snippet: "LinkedIn Editorial Guidelines"
+    prevalence: common
+  - category: documentation
+    pattern: Regras editoriais e de voz codificadas em markdown, nao em validadores estruturados
+    description: O julgamento editorial existe principalmente como texto instrucional; apenas duplicidade e formato tem ancoragem operacional mais forte.
+    examples:
+      - file: .github/agents/linkedin-voice-validator.agent.md
+        location: .github/agents/linkedin-voice-validator.agent.md:13
+        snippet: "Hard Rules"
+      - file: .github/instructions/linkedin-editorial-guidelines.instructions.md
+        location: .github/instructions/linkedin-editorial-guidelines.instructions.md:7
+        snippet: "Every post should have one main idea..."
+    prevalence: common
+  - category: testing
+    pattern: Core app em Node/Express com comportamento de automacao fora dos agentes markdown
+    description: O comportamento verificavel do produto esta concentrado no codigo JS; os agentes funcionam como camada declarativa.
+    examples:
+      - file: src/cli.js
+        location: src/cli.js:126
+        snippet: "if (domain === \"sync\" && action === \"run\")"
+      - file: src/local-state.js
+        location: src/local-state.js:1
+        snippet: "Persistencia de auth, drafts e sync store."
+    prevalence: common
+
+related_architecture:
+  components_relevant_to_domain:
+    - component: LinkedIn Publishing Orchestrator
+      responsibility: Encadear o fluxo de criacao, revisao e publicacao.
+      location: .github/agents/linkedin-publishing-orchestrator.agent.md
+      relationship_to_domain: domain depends on this
+    - component: Draft Manager
+      responsibility: Executar o fluxo operacional seguro via CLI.
+      location: .github/agents/linkedin-draft-manager.agent.md
+      relationship_to_domain: domain depends on this
+    - component: Sync subsystem
+      responsibility: Alimentar a memoria local de posts usados na checagem de duplicidade.
+      location: src/linkedin-sync.js
+      relationship_to_domain: domain depends on this
+    - component: Operator API
+      responsibility: Expor endpoints para drafts, prepare, confirm e history.
+      location: src/app.js
+      relationship_to_domain: domain depends on this
+  interfaces_used_by_domain:
+    - interface: npm CLI commands
+      location: README.md
+      usage_pattern: Copilot usa comandos JSON-friendly como interface canonica de operacao.
+    - interface: custom agents frontmatter
+      location: .github/agents/*.agent.md
+      usage_pattern: Ferramentas e subagentes sao declarados via YAML frontmatter.
+    - interface: local sync store
+      location: .local/linkedin/sync/posts.json
+      usage_pattern: Fonte local para comparacao de duplicidade e historico recente.
+  data_flow_involving_domain: >-
+    Pedido do usuario entra no orquestrador, passa por entrevista/copy/voz/critica/formato,
+    e depois segue para duplicate guard e draft manager. O draft manager usa a CLI, que chama
+    os endpoints operadores. Os endpoints consultam local-state e sync store antes de preparar
+    ou confirmar a publicacao no LinkedIn.
+  key_relationships_to_domain:
+    - from: .github/agents/linkedin-publishing-orchestrator.agent.md
+      to: .github/agents/linkedin-post-critic.agent.md
+      relationship: composes
+    - from: .github/agents/linkedin-publishing-orchestrator.agent.md
+      to: .github/agents/linkedin-voice-validator.agent.md
+      relationship: composes
+    - from: src/cli.js
+      to: src/app.js
+      relationship: calls
+    - from: src/app.js
+      to: src/local-state.js
+      relationship: calls
+    - from: src/app.js
+      to: src/linkedin-sync.js
+      relationship: depends on sync outputs
+
+related_technology_stack:
+  languages_used_in_domain:
+    - Markdown
+    - JavaScript
+    - YAML
+  frameworks_used_in_domain:
+    - name: VS Code custom agents
+      usage_in_domain: Especializacao de funcoes editoriais e operacionais via arquivos .agent.md.
+    - name: Express
+      usage_in_domain: Operator API local para drafts, prepare, confirm e history.
+    - name: Playwright
+      usage_in_domain: Sincronizacao de posts via navegador autenticado.
+  libraries_used_in_domain:
+    - name: express-session
+      purpose_in_domain: Persistencia de sessao do fluxo local.
+    - name: dotenv
+      purpose_in_domain: Configuracao do ambiente local.
+  external_apis_used_in_domain:
+    - name: LinkedIn API
+      integration_point: src/app.js e src/linkedin.js para auth e publicacao.
+    - name: VS Code MCP/customization framework
+      integration_point: Agentes, skills, plugins e MCP servers suportados pelo editor.
+
+related_conventions:
+  naming_patterns_in_domain: >-
+    Nomes guiados por responsabilidade de negocio, como Draft Manager, Post Critic,
+    Voice Validator e Format Strategist.
+  structure_of_domain: >-
+    Instrucao declarativa em markdown para comportamento do agente e logica verificavel
+    em JavaScript para auth, duplicidade, sync e publicacao.
+  error_handling_in_domain: >-
+    Bloqueios fortes para publish direto e duplicata exata; warnings para similaridade;
+    reauth_required quando a autenticacao local expira ou fica invalida.
+  testing_in_domain: >-
+    O repositorio testa a camada Node; nao ha evidencias de testes automatizados para
+    agentes markdown, instructions ou skills customizadas.
+  documentation_in_domain: >-
+    README, AGENTS.md e instructions descrevem workflow, limitacoes e heuristicas
+    editoriais com bastante detalhe.
+
+related_dependencies:
+  internal:
+    - component: sync store local
+      relationship_to_domain: Alimenta duplicate checks com posts existentes.
+      direction: inbound
+    - component: CLI commands
+      relationship_to_domain: Encapsulam operacao de draft/publish para o Copilot.
+      direction: bidirectional
+    - component: custom agents markdown
+      relationship_to_domain: Encapsulam julgamento editorial e roteamento.
+      direction: bidirectional
+  external:
+    - name: VS Code custom agents support
+      purpose_for_domain: Permite orquestracao, handoffs e restricao de ferramentas.
+    - name: MCP servers in VS Code
+      purpose_for_domain: Permitem tools, prompts, resources e apps para dados externos ou locais.
+    - name: Agent plugins
+      purpose_for_domain: Podem empacotar skills, prompts, hooks e MCPs reutilizaveis.
+
+domain_security_considerations:
+  sensitive_areas:
+    - area: LinkedIn auth local
+      location: .local/linkedin/auth.json
+      concern: Tokens persistidos localmente exigem cuidado ao expor novas ferramentas ou MCPs.
+    - area: Workspace MCP configuration
+      location: .vscode/mcp.json
+      concern: MCP local pode executar codigo arbitrario e precisa de fonte confiavel e escopo minimo.
+  authentication_patterns_in_domain: >-
+    Auth persistida localmente e invalidada em 401; o fluxo exige reautenticacao explicita.
+  authorization_patterns_in_domain: >-
+    O repo opera sobre a conta autenticada do usuario; nao ha multiplexacao de papeis no dominio.
+  data_validation_in_domain: >-
+    Flags de formato sao validadas no local-state e publicacao direta e explicitamente bloqueada.
+
+testing_patterns:
+  framework: node:test
+  coverage_areas:
+    - fluxo operador Node/Express
+    - sync browser subsystem
+    - persistencia local
+  test_organization: Testes centralizados em test/ e orientados a modulos JavaScript do app.
+  mock_patterns:
+    - local state e API local podem ser injetados na app/CLI
+    - agentes markdown nao apresentam padrao de teste dedicado no repositorio
+
+open_questions:
+  - question: Os agentes externos reepl-linkedin, gem-critic, gem-designer e Explore estao de fato disponiveis e confiaveis no ambiente do usuario?
+    context: O orquestrador depende deles, mas eles nao estao versionados nem documentados no repo.
+    type: decision_blocker
+    affects: [research]
+  - question: O usuario aceita adicionar configuracao compartilhada de MCP em workspace, como .vscode/mcp.json, ou prefere manter tudo no perfil local?
+    context: Isso altera o custo real de adocao e o compartilhamento da configuracao com o time.
+    type: research
+    affects: [research]
+  - question: A checagem de duplicidade precisa evoluir de similaridade lexical para overlap tematico/hook com heuristica estruturada?
+    context: O agente Duplicate Guard promete mais do que o codigo operacional hoje entrega.
+    type: research
+    affects: [research]
+
+gaps:
+  - area: Skills locais do dominio LinkedIn
+    description: Nao existe pasta .github/skills com workflows empacotados para briefing, fact-check, duplicate review ou publish review.
+    impact: research_blocker
+    affects: [research]
+  - area: MCP/resource para sync e history
+    description: O sync local existe, mas nao ha MCP resource/prompt/app dedicado para expor posts anteriores como contexto estruturado no chat.
+    impact: research_blocker
+    affects: [research]
+  - area: Grounding factual para posts tecnicos
+    description: As regras editoriais pedem concretude, mas nao existe no fluxo um passo estruturado de verificacao de fatos/links antes do draft final.
+    impact: research_blocker
+    affects: [research]
+  - area: Handoffs formais entre agentes
+    description: O repo tem orquestrador e agentes, mas nao ha evidencia de handoffs declarados para conduzir revisao passo a passo no UI do VS Code.
+    impact: nice_to_know
+    affects: [research]

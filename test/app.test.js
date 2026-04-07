@@ -45,6 +45,7 @@ async function startTestServer({ stateDir, publishIntentTtlMs = 10 * 60 * 1000, 
     exchangeCodeForToken: async () => ({ access_token: "token" }),
     getUserInfo: async () => ({ sub: "user-1", name: "Test User" }),
     listAuthorPosts: async () => ({ elements: [] }),
+    createPost: async () => ({ postId: "post-123", payload: { ok: true } }),
     createTextPost: async () => ({ postId: "post-123", payload: { ok: true } }),
     ...(linkedinOverrides || {})
   };
@@ -122,6 +123,7 @@ function createLinkedinStub(overrides = {}) {
     exchangeCodeForToken: async () => ({ access_token: "token" }),
     getUserInfo: async () => ({ sub: "user-1", name: "Test User" }),
     listAuthorPosts: async () => ({ elements: [] }),
+    createPost: async () => ({ postId: "post-123", payload: { ok: true } }),
     createTextPost: async () => ({ postId: "post-123", payload: { ok: true } }),
     ...overrides
   };
@@ -239,6 +241,66 @@ test("draft CRUD endpoints create, update, list, and delete persisted drafts", a
     assert.equal(showAfterDelete.error, "draft_not_found");
     assert.equal(listAfterDeleteResponse.status, 200);
     assert.deepEqual(listAfterDelete.drafts, []);
+  } finally {
+    await harness.close();
+  }
+});
+
+test("draft create and update persist rich post options", async () => {
+  const harness = await startTestServer();
+
+  try {
+    const createResponse = await fetch(`${harness.baseUrl}/operator/drafts`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        content: "Texto com preview",
+        postOptions: {
+          article: {
+            source: "https://pablostefan.com.br",
+            title: "Portfolio",
+            description: "Descricao curta"
+          }
+        }
+      })
+    });
+    const createdDraft = await createResponse.json();
+
+    const updateResponse = await fetch(`${harness.baseUrl}/operator/drafts/${createdDraft.draftId}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        content: "Texto com imagem",
+        postOptions: {
+          image: {
+            path: "./fixtures/cover.png",
+            altText: "Capa do portfolio"
+          }
+        }
+      })
+    });
+    const updatedDraft = await updateResponse.json();
+
+    assert.equal(createResponse.status, 201);
+    assert.deepEqual(createdDraft.postOptions, {
+      article: {
+        source: "https://pablostefan.com.br",
+        title: "Portfolio",
+        description: "Descricao curta",
+        thumbnailPath: null
+      }
+    });
+    assert.equal(updateResponse.status, 200);
+    assert.deepEqual(updatedDraft.postOptions, {
+      image: {
+        path: "./fixtures/cover.png",
+        altText: "Capa do portfolio"
+      }
+    });
   } finally {
     await harness.close();
   }
@@ -508,10 +570,105 @@ test("publish confirm rejects expired confirmation IDs", async () => {
   }
 });
 
+test("publish confirm sends article metadata when draft includes preview fields", async () => {
+  let publishPayload = null;
+  const harness = await startTestServer({
+    linkedinOverrides: {
+      createPost: async (payload) => {
+        publishPayload = payload;
+        return { postId: "post-article", payload: { ok: true } };
+      }
+    }
+  });
+  await writePersistedAuth(harness.config.authFilePath);
+
+  try {
+    const draftResponse = await fetch(`${harness.baseUrl}/operator/drafts`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        content: "Veja meu portfolio",
+        postOptions: {
+          article: {
+            source: "https://pablostefan.com.br",
+            title: "pablostefan.com.br",
+            description: "Portfolio pessoal"
+          }
+        }
+      })
+    });
+    const draft = await draftResponse.json();
+
+    const prepareResponse = await fetch(`${harness.baseUrl}/operator/publish/prepare`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ draftId: draft.draftId })
+    });
+    const prepared = await prepareResponse.json();
+
+    const confirmResponse = await fetch(`${harness.baseUrl}/operator/publish/confirm`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ confirmationId: prepared.confirmationId, confirm: true })
+    });
+
+    assert.equal(confirmResponse.status, 201);
+    assert.deepEqual(publishPayload.postOptions, {
+      article: {
+        source: "https://pablostefan.com.br",
+        title: "pablostefan.com.br",
+        description: "Portfolio pessoal",
+        thumbnailPath: null
+      }
+    });
+  } finally {
+    await harness.close();
+  }
+});
+
+test("publish prepare rejects invalid mixed rich post options", async () => {
+  const harness = await startTestServer();
+  await writePersistedAuth(harness.config.authFilePath);
+
+  try {
+    const response = await fetch(`${harness.baseUrl}/operator/publish/prepare`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        content: "Nao pode misturar",
+        postOptions: {
+          article: {
+            source: "https://example.com",
+            title: "Titulo",
+            description: "Descricao"
+          },
+          image: {
+            path: "./cover.png"
+          }
+        }
+      })
+    });
+    const payload = await response.json();
+
+    assert.equal(response.status, 400);
+    assert.equal(payload.error, "invalid_publish_post_options");
+  } finally {
+    await harness.close();
+  }
+});
+
 test("LinkedIn 401 during publish invalidates persisted auth", async () => {
   const harness = await startTestServer({
     linkedinOverrides: {
-      createTextPost: async () => {
+      createPost: async () => {
         const error = new Error("Unauthorized");
         error.status = 401;
         throw error;

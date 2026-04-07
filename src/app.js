@@ -4,6 +4,7 @@ import session from "express-session";
 import { config } from "./config.js";
 import {
   buildAuthorizationUrl,
+  createPost,
   createState,
   createTextPost,
   exchangeCodeForToken,
@@ -184,6 +185,7 @@ export function createApp(options = {}) {
   const appConfig = options.config || config;
   const linkedinApi = options.linkedin || {
     buildAuthorizationUrl,
+    createPost,
     createTextPost,
     exchangeCodeForToken,
     getUserInfo,
@@ -402,7 +404,8 @@ POST /logout</pre>
   app.post("/operator/drafts", asyncHandler(async (req, res) => {
     const duplicateCheck = await findDuplicatePost(localState, req.body?.content);
     const draft = await localState.saveDraft({
-      content: req.body?.content
+      content: req.body?.content,
+      postOptions: req.body?.postOptions
     });
 
     res.status(201).json({
@@ -442,7 +445,8 @@ POST /logout</pre>
     const duplicateCheck = await findDuplicatePost(localState, req.body?.content);
     const draft = await localState.saveDraft({
       draftId: req.params.draftId,
-      content: req.body?.content
+      content: req.body?.content,
+      postOptions: req.body?.postOptions
     });
 
     return res.json({
@@ -488,6 +492,7 @@ POST /logout</pre>
 
     let draftId = req.body?.draftId || null;
     let content = req.body?.content;
+    let postOptions = req.body?.postOptions;
     const allowDuplicate = req.body?.allowDuplicate === true;
 
     if (draftId) {
@@ -501,6 +506,7 @@ POST /logout</pre>
       }
 
       content = draft.content;
+      postOptions = draft.postOptions || null;
     }
 
     const duplicateCheck = await findDuplicatePost(localState, content);
@@ -514,7 +520,7 @@ POST /logout</pre>
       });
     }
 
-    const intent = localState.createPublishIntent({ draftId, content });
+    const intent = localState.createPublishIntent({ draftId, content, postOptions });
 
     return res.status(201).json({
       ...intent,
@@ -581,10 +587,13 @@ POST /logout</pre>
     let publishResult;
 
     try {
-      publishResult = await linkedinApi.createTextPost({
+      const publishMethod = linkedinApi.createPost || linkedinApi.createTextPost;
+
+      publishResult = await publishMethod({
         accessToken: authStatus.auth.accessToken,
         authorUrn: authStatus.auth.personUrn,
         content: intent.content,
+        postOptions: intent.postOptions || null,
         visibility: "PUBLIC"
       });
     } catch (requestError) {
@@ -599,6 +608,7 @@ POST /logout</pre>
         status: "failed",
         timestamp,
         content: intent.content,
+        postOptions: intent.postOptions || null,
         error: requestError.status === 401 ? "linkedin_401" : requestError.message,
         details: requestError.payload || null
       };
@@ -629,7 +639,8 @@ POST /logout</pre>
       status: "published",
       timestamp,
       postId: publishResult.postId || null,
-      content: intent.content
+      content: intent.content,
+      postOptions: intent.postOptions || null
     };
 
     await appendHistoryOrThrow(successEntry, {
@@ -667,7 +678,15 @@ POST /logout</pre>
       });
     }
 
-    if (error.code === "invalid_draft_content" || error.code === "invalid_publish_content") {
+    if (
+      error.code === "invalid_draft_content"
+      || error.code === "invalid_publish_content"
+      || error.code === "invalid_draft_post_options"
+      || error.code === "invalid_publish_post_options"
+      || error.code === "invalid_media_file"
+      || error.code === "missing_media_file"
+      || error.code === "image_upload_init_failed"
+    ) {
       return res.status(400).json({
         error: error.code,
         message: error.message
