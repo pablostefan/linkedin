@@ -102,6 +102,15 @@ npm run linkedin:analytics
 npm run linkedin:analytics -- --days=30
 ```
 
+### Posts publicados
+
+```bash
+npm run linkedin:posts:sync
+```
+
+Sincroniza todos os posts publicados do Zernio para `.local/linkedin/zernio-posts.json`.
+Usado pelos agentes de memoria editorial, duplicatas e performance para analisar conteudo historico.
+
 ### Mencoes
 
 Para mencionar alguem num post, primeiro resolva o perfil:
@@ -125,6 +134,7 @@ Os dados ficam em `.local/linkedin/`:
 | `drafts.json` | Rascunhos ativos |
 | `drafts.backup.json` | Backup atomico dos rascunhos |
 | `publish-history.jsonl` | Historico append-only de publicacoes |
+| `zernio-posts.json` | Cache dos posts publicados sincronizado do Zernio |
 
 ## Agentes Copilot
 

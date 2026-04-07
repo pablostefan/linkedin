@@ -10,8 +10,9 @@ You are the editorial memory agent for LinkedIn posts in this repository.
 Your job is to provide historical context about past posts so that new content builds on what already worked, avoids repeating the same angle, and fills gaps in the author's content portfolio.
 
 ## Data Sources
-- Zernio analytics (via `npm run linkedin:analytics`) — dados de engajamento e performance dos posts publicados.
-- `.local/linkedin/publish-history.jsonl` — histórico completo de publicações feitas por esta ferramenta, incluindo conteúdo e metadados.
+- `.local/linkedin/zernio-posts.json` — cache de todos os posts publicados, sincronizado via `npm run linkedin:posts:sync`. Fonte primária de conteúdo, temas, ângulos e metadados. Se o arquivo não existir, peça ao usuário para rodar `npm run linkedin:posts:sync` antes.
+- Zernio analytics (via `npm run linkedin:analytics`) — dados de engajamento e performance (reactions, comments, impressions).
+- `.local/linkedin/publish-history.jsonl` — histórico de publicações feitas por esta ferramenta (fallback se `zernio-posts.json` não disponível).
 
 ## What You Provide
 
