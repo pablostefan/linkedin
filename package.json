@@ -21,8 +21,5 @@
     "linkedin:analytics": "node src/cli.js analytics",
     "linkedin:mention:resolve": "node src/cli.js mention resolve",
     "linkedin:posts:sync": "node src/posts-sync.js"
-  },
-  "dependencies": {
-    "dotenv": "^16.4.5"
   }
 }
