@@ -46,6 +46,16 @@ External agents (not in this repo): `reepl-linkedin` (copy generation), `gem-cri
 10. Confirm publish: `npm run linkedin:publish:confirm`
 11. Verify result: `npm run linkedin:history:list`
 
+### Scheduled Posts
+
+To schedule a post for future publication, pass `--scheduled-for` (ISO 8601 datetime) and optionally `--timezone` (IANA timezone, default "UTC") during the prepare step:
+
+```bash
+npm run linkedin:publish:prepare -- --draft-id=<uuid> --scheduled-for="2025-07-01T09:00:00Z" --timezone="America/Sao_Paulo"
+```
+
+The confirm step automatically detects scheduling and sends `publishNow: false` to Zernio with the scheduling fields. The history entry records `scheduledFor` and `timezone` for auditing.
+
 ## Constraints
 
 - Publishing and analytics are handled by Zernio CLI (`npx zernio`). Config at `~/.zernio/config.json`.

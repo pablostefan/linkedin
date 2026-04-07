@@ -252,6 +252,34 @@ describe("local-state", () => {
         return true;
       });
     });
+
+    it("includes scheduledFor and timezone when provided", () => {
+      const intent = state.createPublishIntent({
+        content: "Scheduled",
+        scheduledFor: "2025-07-01T09:00:00Z",
+        timezone: "America/Sao_Paulo",
+      });
+      assert.equal(intent.scheduledFor, "2025-07-01T09:00:00Z");
+      assert.equal(intent.timezone, "America/Sao_Paulo");
+    });
+
+    it("preserves scheduledFor through consume", () => {
+      const intent = state.createPublishIntent({
+        content: "Scheduled",
+        scheduledFor: "2025-07-01T09:00:00Z",
+        timezone: "America/Sao_Paulo",
+      });
+      const result = state.consumePublishIntent(intent.confirmationId);
+      assert.equal(result.ok, true);
+      assert.equal(result.intent.scheduledFor, "2025-07-01T09:00:00Z");
+      assert.equal(result.intent.timezone, "America/Sao_Paulo");
+    });
+
+    it("omits scheduledFor and timezone when not provided", () => {
+      const intent = state.createPublishIntent({ content: "Immediate" });
+      assert.equal(intent.scheduledFor, undefined);
+      assert.equal(intent.timezone, undefined);
+    });
   });
 
   describe("appendHistoryEntry and listHistory", () => {

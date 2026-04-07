@@ -187,6 +187,8 @@ async function main() {
       const draftId = resolveStringFlag(flags, "draft-id");
       let content = resolveContent(flags);
       let postOptions = resolvePostOptions(flags);
+      const scheduledFor = resolveStringFlag(flags, "scheduled-for");
+      const timezone = resolveStringFlag(flags, "timezone");
 
       if (draftId) {
         const draft = await localState.getDraft(draftId);
@@ -205,7 +207,7 @@ async function main() {
         return;
       }
 
-      printJson(localState.createPublishIntent({ draftId, content, postOptions }));
+      printJson(localState.createPublishIntent({ draftId, content, postOptions, scheduledFor, timezone }));
       return;
     }
 
@@ -225,7 +227,10 @@ async function main() {
       }
 
       const intent = result.intent;
-      const publishOptions = { publishNow: true };
+      const isScheduled = Boolean(intent.scheduledFor);
+      const publishOptions = isScheduled
+        ? { publishNow: false, scheduledFor: intent.scheduledFor, timezone: intent.timezone || "UTC" }
+        : { publishNow: true };
 
       if (intent.postOptions?.image?.path) {
         publishOptions.imagePaths = [intent.postOptions.image.path];
@@ -250,6 +255,7 @@ async function main() {
         draftId: intent.draftId,
         content: intent.content,
         postOptions: intent.postOptions,
+        ...(isScheduled ? { scheduledFor: intent.scheduledFor, timezone: intent.timezone || "UTC" } : {}),
         publishedAt: new Date().toISOString(),
         zernioResponse: zernioResult
       };

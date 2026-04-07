@@ -93,6 +93,29 @@ describe("zernio", () => {
       assert.equal(args[idx + 1], "2025-01-01T10:00:00Z");
     });
 
+    it("includes --timezone when provided", async () => {
+      fakeExecFileSuccess({ id: "post-1" });
+      await publishPost({ content: "Hi", accountId: "acc-1", options: { timezone: "America/Sao_Paulo" } });
+      const args = lastCallArgs();
+      const idx = args.indexOf("--timezone");
+      assert.ok(idx >= 0);
+      assert.equal(args[idx + 1], "America/Sao_Paulo");
+    });
+
+    it("includes both --scheduled-for and --timezone together", async () => {
+      fakeExecFileSuccess({ id: "post-1" });
+      await publishPost({
+        content: "Hi",
+        accountId: "acc-1",
+        options: { scheduledFor: "2025-07-01T09:00:00Z", timezone: "America/Sao_Paulo" }
+      });
+      const args = lastCallArgs();
+      assert.ok(args.includes("--scheduled-for"));
+      assert.ok(args.includes("--timezone"));
+      assert.equal(args[args.indexOf("--scheduled-for") + 1], "2025-07-01T09:00:00Z");
+      assert.equal(args[args.indexOf("--timezone") + 1], "America/Sao_Paulo");
+    });
+
     it("includes --organization-urn when provided", async () => {
       fakeExecFileSuccess({ id: "post-1" });
       await publishPost({ content: "Hi", accountId: "acc-1", options: { organizationUrn: "urn:li:organization:123" } });

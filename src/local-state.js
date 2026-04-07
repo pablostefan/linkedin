@@ -311,7 +311,7 @@ export function createLocalState(appConfig) {
     }
   }
 
-  function createPublishIntent({ draftId = null, content, postOptions, rawContent = null }) {
+  function createPublishIntent({ draftId = null, content, postOptions, rawContent = null, scheduledFor = null, timezone = null }) {
     const normalizedContent = typeof content === "string" ? content.trim() : "";
 
     if (!normalizedContent) {
@@ -330,6 +330,8 @@ export function createLocalState(appConfig) {
       content: normalizedContent,
       ...(rawContent ? { rawContent: rawContent.trim() } : {}),
       postOptions: normalizedPostOptions,
+      ...(scheduledFor ? { scheduledFor } : {}),
+      ...(timezone ? { timezone } : {}),
       createdAt: new Date(now).toISOString(),
       expiresAt: new Date(now + appConfig.publishIntentTtlMs).toISOString(),
       consumedAt: null
@@ -344,6 +346,8 @@ export function createLocalState(appConfig) {
       content: intent.content,
       ...(intent.rawContent ? { rawContent: intent.rawContent } : {}),
       postOptions: intent.postOptions,
+      ...(intent.scheduledFor ? { scheduledFor: intent.scheduledFor } : {}),
+      ...(intent.timezone ? { timezone: intent.timezone } : {}),
       expiresAt: intent.expiresAt
     };
   }

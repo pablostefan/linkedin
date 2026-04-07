@@ -185,6 +185,25 @@ describe("cli", () => {
       const result = await runCli(["publish", "prepare", "--draft-id", "non-existent"], { LOCAL_DATA_DIR: tempDir });
       assert.equal(result.json?.error, "draft_not_found");
     });
+
+    it("includes scheduledFor and timezone in intent", async () => {
+      const result = await runCli([
+        "publish", "prepare",
+        "--content", "Scheduled post",
+        "--scheduled-for", "2025-07-01T09:00:00Z",
+        "--timezone", "America/Sao_Paulo",
+      ], { LOCAL_DATA_DIR: tempDir });
+      assert.ok(result.json?.confirmationId);
+      assert.equal(result.json?.scheduledFor, "2025-07-01T09:00:00Z");
+      assert.equal(result.json?.timezone, "America/Sao_Paulo");
+    });
+
+    it("omits scheduledFor when not provided", async () => {
+      const result = await runCli(["publish", "prepare", "--content", "Immediate post"], { LOCAL_DATA_DIR: tempDir });
+      assert.ok(result.json?.confirmationId);
+      assert.equal(result.json?.scheduledFor, undefined);
+      assert.equal(result.json?.timezone, undefined);
+    });
   });
 
   describe("publish confirm", () => {

@@ -37,6 +37,10 @@ export async function publishPost({ content, accountId, options = {} }) {
     args.push("--scheduled-for", options.scheduledFor);
   }
 
+  if (options.timezone) {
+    args.push("--timezone", options.timezone);
+  }
+
   if (options.organizationUrn) {
     args.push("--organization-urn", options.organizationUrn);
   }
