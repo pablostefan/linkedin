@@ -105,6 +105,38 @@ Abra:
 
 Todos os comandos imprimem JSON por padrao para facilitar o uso pelo Copilot no VS Code.
 
+## Agentes do projeto
+
+Este repositorio agora tem agentes locais de workspace em `.github/agents/`.
+
+### LinkedIn Publishing Orchestrator
+
+Use este agente quando quiser criar, revisar, transformar em draft, preparar e conduzir o fluxo completo de uma postagem no LinkedIn usando a ferramenta deste projeto.
+
+Ele foi instruido para:
+
+- escrever em portugues por padrao
+- usar `reepl-linkedin` para gerar variacoes de copy
+- usar `gem-critic` para revisar qualidade editorial
+- validar duplicidade e similaridade contra `.local/linkedin/sync/posts.json`
+- seguir o fluxo `draft -> prepare -> confirm`
+- nunca publicar sem sua confirmacao explicita
+
+### LinkedIn Visual Briefing
+
+Use este agente quando quiser decidir se um post deve ser apenas texto, imagem unica ou carrossel, e quando quiser um briefing visual para futura criacao manual ou por IA.
+
+Ele nao gera imagem automaticamente e nao publica nada. O foco dele e:
+
+- recomendar `text_only`, `single_image` ou `carousel`
+- explicar quando imagem realmente ajuda
+- devolver um briefing visual curto e um prompt-base para uso futuro
+- sugerir `altText` em portugues
+
+### Instrucoes editoriais
+
+O arquivo `.github/instructions/linkedin-editorial-guidelines.instructions.md` centraliza heuristicas de escrita para posts tecnicos, posts de marca pessoal, CTA e uso de imagem. A ideia e manter criterios editoriais consistentes entre os agentes do projeto.
+
 ## Sincronizacao manual via navegador
 
 O MVP de sync nao usa scheduler, watch nem loop recorrente. O comando roda uma vez, captura o que estiver visivel na pagina e persiste estado minimo para a proxima execucao incremental.
