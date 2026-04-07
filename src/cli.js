@@ -207,7 +207,7 @@ async function main() {
         return;
       }
 
-      printJson(localState.createPublishIntent({ draftId, content, postOptions, scheduledFor, timezone }));
+      printJson(await localState.createPublishIntent({ draftId, content, postOptions, scheduledFor, timezone }));
       return;
     }
 
@@ -219,7 +219,7 @@ async function main() {
         return;
       }
 
-      const result = localState.consumePublishIntent(confirmationId);
+      const result = await localState.consumePublishIntent(confirmationId);
       if (!result.ok) {
         printJson({ error: result.code, message: result.message });
         process.exitCode = 1;
@@ -288,12 +288,13 @@ async function main() {
 
     if (domain === "mention" && action === "resolve") {
       const query = resolveStringFlag(flags, "url") || positionals[0];
+      const displayName = resolveStringFlag(flags, "display-name");
       if (!query) {
         printJson({ error: "missing_url", message: "--url or positional argument is required." });
         process.exitCode = 1;
         return;
       }
-      printJson(await resolveMention({ nameOrUrl: query }));
+      printJson(await resolveMention({ accountId: config.zernioAccountId, nameOrUrl: query, displayName }));
       return;
     }
 

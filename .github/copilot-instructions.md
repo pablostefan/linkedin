@@ -58,9 +58,10 @@ Este repositório é um assistente local de publicação no LinkedIn usado pelo 
 
 ## Arquitetura de Agentes
 
-Este projeto usa um orquestrador + editor + draft manager. Para workflows de posts no LinkedIn, preferir o `LinkedIn Publishing Orchestrator` que delega para:
+Este projeto usa um orquestrador + pesquisador + editor + draft manager. Para workflows de posts no LinkedIn, preferir o `LinkedIn Publishing Orchestrator` que delega para:
 
 | Agente | Função |
 |:-------|:-------|
 | LinkedIn Post Editor | Colaborar na criação e refinamento do texto do post. |
+| LinkedIn Trend Researcher | Pesquisar posts de destaque no LinkedIn para usar como base. |
 | LinkedIn Draft Manager | Operações CLI (draft, prepare, confirm) |

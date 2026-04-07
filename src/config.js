@@ -11,6 +11,7 @@ export const config = {
   draftsFilePath: path.join(localDataDir, "drafts.json"),
   draftsBackupFilePath: path.join(localDataDir, "drafts.backup.json"),
   publishHistoryFilePath: path.join(localDataDir, "publish-history.jsonl"),
+  publishIntentsFilePath: path.join(localDataDir, "publish-intents.json"),
   publishIntentTtlMs: Number(process.env.PUBLISH_INTENT_TTL_MS || 10 * 60 * 1000),
   zernioAccountId: "69d527827dea335c2bc20f6f",
   zernioOrganizationUrn: "urn:li:organization:112832146"

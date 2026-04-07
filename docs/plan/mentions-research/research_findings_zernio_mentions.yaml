@@ -1,0 +1,270 @@
+plan_id: mentions-research
+objective: Investigate how the Zernio CLI handles LinkedIn mentions when creating posts
+focus_area: zernio-mentions-integration
+created_at: "2026-04-07T00:00:00Z"
+created_by: gem-researcher
+status: completed
+
+tldr: |
+  - Zernio CLI `posts:create` has NO `--mentions` flag. The only parameters are `--text`, `--accounts`, `--media`, `--tags`, `--hashtags`, `--scheduledAt`, `--timezone`, `--draft`, `--title`.
+  - The project already has mention resolution infrastructure (`resolveMention` → Zernio HTTP API → returns `urn` + `mentionFormat`), and `local-state.js` validates/stores mentions in drafts. But `publishPost()` in `zernio.js` NEVER passes mention data to the CLI — it's completely dropped at the publication boundary.
+  - Repository memory confirms a previously successful mention publish (urn:li:share:7447313181821190144) using `mentionFormat` embedded in content. However, that success was likely via Zernio web UI or direct API, NOT via this CLI workflow.
+  - The root gap: `publishPost()` builds CLI args with `--text` (content) but does NOT pass structured mention objects. The Zernio CLI may require a `--mentions` JSON parameter, or the Zernio HTTP API (not CLI) may be needed for mention-aware publishing.
+
+research_metadata:
+  methodology: "hybrid retrieval: semantic_search + grep_search, file reads, terminal CLI --help inspection, repository memory consultation"
+  scope: "Full analysis of src/zernio.js, src/cli.js, src/local-state.js, test/zernio.test.js, Zernio CLI help output, ~/.zernio/config.json"
+  confidence: high
+  coverage: 95
+  decision_blockers: 1
+  research_blockers: 0
+
+files_analyzed:
+  - file: zernio.js
+    path: src/zernio.js
+    purpose: "Wraps Zernio CLI and HTTP API calls for publishing, analytics, and mention resolution"
+    key_elements:
+      - element: runZernio
+        type: function
+        location: "src/zernio.js:6"
+        description: "Generic CLI runner: spawns `npx zernio <args>`, parses JSON stdout"
+      - element: publishPost
+        type: function
+        location: "src/zernio.js:87"
+        description: |
+          Builds `posts:create` CLI args. Accepts `content`, `accountId`, `options`.
+          Passes: --text, --accounts, --draft, --scheduledAt, --timezone, --hashtags, --tags, --media.
+          DOES NOT pass any mention data. The `options` object has no mention handling.
+      - element: runZernioMentionResolve
+        type: function
+        location: "src/zernio.js:48"
+        description: |
+          Direct HTTP call to Zernio API: GET /v1/accounts/{accountId}/linkedin-mentions?url=<url>&displayName=<name>.
+          Returns { urn, mentionFormat }. NOT a CLI call — uses fetch() directly with Bearer auth.
+      - element: resolveMention
+        type: function
+        location: "src/zernio.js:139"
+        description: "Public wrapper: resolves API key, then calls runZernioMentionResolve"
+    language: javascript
+    lines: 149
+
+  - file: cli.js
+    path: src/cli.js
+    purpose: "CLI entry point for all local commands (draft, publish, mention, analytics)"
+    key_elements:
+      - element: "publish confirm handler"
+        type: pattern
+        location: "src/cli.js:225-272"
+        description: |
+          Consumes publish intent, builds publishOptions. Passes image paths and article source.
+          CRITICALLY: does NOT extract mentions from intent.postOptions.mentions to pass to publishPost().
+          The mentions data exists in the draft/intent but is silently ignored at publish time.
+      - element: "mention resolve handler"
+        type: pattern
+        location: "src/cli.js:289-298"
+        description: "CLI `mention resolve` command: calls resolveMention() with --url and --display-name flags"
+    language: javascript
+    lines: 307
+
+  - file: local-state.js
+    path: src/local-state.js
+    purpose: "Manages local draft storage, publish intents, and history"
+    key_elements:
+      - element: normalizeMentions
+        type: function
+        location: "src/local-state.js:41"
+        description: |
+          Validates mention objects: requires { type: 'person', name: string, urn: string }.
+          Validates URN format against regex: /^urn:li:(?:person|member):[A-Za-z0-9_-]+$/.
+          Properly stores mentions inside postOptions when saving drafts.
+      - element: normalizePostOptions
+        type: function
+        location: "src/local-state.js:87"
+        description: "Normalizes article, image, AND mentions in postOptions. Mentions are preserved in draft payload."
+    language: javascript
+    lines: 140
+
+  - file: zernio.test.js
+    path: test/zernio.test.js
+    purpose: "Unit tests for Zernio wrapper functions"
+    key_elements:
+      - element: "resolveMention test"
+        type: pattern
+        location: "test/zernio.test.js:215-247"
+        description: |
+          Confirms resolveMention returns { urn: 'urn:li:person:abc', mentionFormat: '@[Someone Name](urn:li:person:abc)' }.
+          The mentionFormat is the LinkedIn little text format to embed in content.
+      - element: "publishPost tests"
+        type: pattern
+        location: "test/zernio.test.js:62-170"
+        description: "Tests confirm publishPost never includes --mentions, --publish-now, --organization-urn, --first-comment, --disable-link-preview"
+    language: javascript
+    lines: 252
+
+patterns_found:
+  - category: architecture
+    pattern: "Mention data pipeline broken at publish boundary"
+    description: |
+      The project has a complete mention resolution and storage pipeline:
+      1. `mention resolve` → resolves URL to { urn, mentionFormat }
+      2. `local-state.js` → validates and stores mentions in draft postOptions
+      3. BUT `publishPost()` → completely ignores mentions when building CLI args
+      The data exists in the draft but is never forwarded to Zernio.
+    examples:
+      - file: src/zernio.js
+        location: "src/zernio.js:87-109"
+        snippet: |
+          # publishPost builds args but has NO mention handling:
+          const args = ["posts:create", "--text", content, "--accounts", accountId];
+          # ...handles isDraft, scheduledFor, timezone, hashtags, tags, imagePaths
+          # MISSING: no mention-related args
+      - file: src/cli.js
+        location: "src/cli.js:234-253"
+        snippet: |
+          # publish confirm builds publishOptions but ignores mentions:
+          if (intent.postOptions?.image?.path) { publishOptions.imagePaths = [...] }
+          if (intent.postOptions?.article?.source) { publishOptions.firstComment = ... }
+          # MISSING: no mention extraction from intent.postOptions.mentions
+    prevalence: common
+
+  - category: architecture
+    pattern: "Zernio CLI has no --mentions flag"
+    description: |
+      The `npx zernio posts:create --help` output shows NO mention-related parameter.
+      Available flags: --text, --accounts, --scheduledAt, --draft, --media, --title, --tags, --hashtags, --timezone.
+      This means even if publishPost() tried to pass mentions, there's no CLI flag for it.
+    examples:
+      - file: "(terminal output)"
+        location: "npx zernio posts:create --help"
+        snippet: "Options: --text, --accounts, --scheduledAt, --draft, --media, --title, --tags, --hashtags, --timezone"
+    prevalence: common
+
+  - category: architecture
+    pattern: "Mention resolution uses direct HTTP, not CLI"
+    description: |
+      resolveMention() bypasses the CLI entirely: it calls fetch() to the Zernio REST API directly.
+      This establishes a pattern where the CLI may not support all features available in the Zernio HTTP API.
+    examples:
+      - file: src/zernio.js
+        location: "src/zernio.js:48-84"
+        snippet: "const endpoint = new URL(`https://zernio.com/api/v1/accounts/${accountId}/linkedin-mentions`);"
+    prevalence: occasional
+
+related_architecture:
+  components_relevant_to_domain:
+    - component: "Zernio CLI (npx zernio)"
+      responsibility: "External binary that publishes posts via posts:create command"
+      location: "node_modules/.bin/zernio (or npx)"
+      relationship_to_domain: "Domain depends on this — it's the only publishing mechanism"
+    - component: "Zernio HTTP API"
+      responsibility: "REST API at zernio.com for mention resolution and possibly direct post creation"
+      location: "https://zernio.com/api/v1/"
+      relationship_to_domain: "Already used for mention resolution; may be needed for mention-aware publishing"
+    - component: "local-state.js"
+      responsibility: "Draft storage and validation including mention objects"
+      location: "src/local-state.js"
+      relationship_to_domain: "Stores mentions properly but they're lost at publish time"
+  data_flow_involving_domain: |
+    1. User resolves mention → resolveMention() → HTTP API → { urn, mentionFormat }
+    2. User creates draft with mentionFormat in content + mentions in postOptions → local-state stores it
+    3. User prepares/confirms → cli.js reads intent → builds publishOptions → calls publishPost()
+    4. publishPost() builds CLI args from content + options → MENTIONS DROPPED → npx zernio posts:create
+    5. Zernio publishes text-only → LinkedIn renders @[Name](urn:...) as plain text, not clickable
+
+related_technology_stack:
+  languages_used_in_domain:
+    - javascript
+  frameworks_used_in_domain:
+    - name: "Zernio CLI"
+      usage_in_domain: "Post publishing via npx zernio posts:create"
+    - name: "Zernio HTTP API"
+      usage_in_domain: "Mention resolution via REST endpoint"
+  external_apis_used_in_domain:
+    - name: "Zernio REST API"
+      integration_point: "src/zernio.js:48 (mention resolve) and potentially for direct post creation"
+
+related_dependencies:
+  internal:
+    - component: "local-state.js mentions pipeline"
+      relationship_to_domain: "Stores mention data that publishPost ignores"
+      direction: outbound
+  external:
+    - name: "Zernio CLI (posts:create)"
+      purpose_for_domain: "Publishing — but lacks mention support"
+    - name: "Zernio HTTP API (/v1/accounts/{id}/linkedin-mentions)"
+      purpose_for_domain: "Mention resolution — works correctly"
+
+open_questions:
+  - question: "Does the Zernio REST API have a direct post creation endpoint (not CLI) that accepts mention objects?"
+    context: |
+      The CLI has no --mentions flag, but the HTTP API already supports mention resolution.
+      There may be a POST /v1/accounts/{id}/posts endpoint that accepts structured mentions.
+      This is the most promising path — it would mirror how resolveMention already bypasses the CLI.
+    type: decision_blocker
+    affects: ["publish-with-mentions"]
+
+  - question: "Is the mentionFormat embedded in --text sufficient for Zernio CLI, or does Zernio need separate mention metadata?"
+    context: |
+      Repository memory states that a previous successful mention publish used mentionFormat in content.
+      However, the current publish flow produces `mentions: []` in the response.
+      This could mean: (a) Zernio CLI doesn't parse mention format from text, or (b) something else changed.
+    type: research
+    affects: ["publish-with-mentions"]
+
+  - question: "Can Zernio CLI --tags or another existing flag be repurposed to pass mention URNs?"
+    context: "Examining if any undocumented CLI behavior could handle mentions via existing flags"
+    type: nice_to_know
+    affects: ["publish-with-mentions"]
+
+gaps:
+  - area: "Zernio REST API documentation for post creation"
+    description: |
+      We don't have documentation for the Zernio REST API's post creation endpoint.
+      The mention resolve endpoint is known and working, but we need to check if there's a
+      direct HTTP post creation endpoint that accepts mention objects alongside text.
+    impact: decision_blocker
+    affects: ["publish-with-mentions"]
+
+  - area: "Zernio CLI source code or changelog"
+    description: |
+      The Zernio CLI is a third-party binary. We can't inspect its source to confirm
+      whether it processes mention format in text or requires separate parameters.
+    impact: research_blocker
+    affects: ["publish-with-mentions"]
+
+assessment: |
+  ## Root Cause
+  The Zernio CLI `posts:create` command has **no `--mentions` flag**. The `publishPost()` function
+  in `zernio.js` doesn't pass any mention data, and the CLI wouldn't accept it even if it did.
+
+  ## What Already Works
+  - Mention resolution via Zernio HTTP API (returns urn + mentionFormat)
+  - Local draft storage with validated mention objects
+  - The mentionFormat `@[Name](urn:li:person:xxx)` syntax itself
+
+  ## What's Broken
+  At the `publishPost()` boundary, mentions are completely dropped. The content text with embedded
+  `@[Name](urn:li:person:xxx)` is passed as `--text`, but without corresponding structured mention
+  metadata, the Zernio backend sends it as plain text to LinkedIn. LinkedIn's API requires
+  **both** the annotation syntax in the text AND structured mention objects in the API payload.
+
+  ## Recommended Approaches (in priority order)
+
+  ### 1. Use Zernio HTTP API directly for mention-aware posts (MOST PROMISING)
+  Since `resolveMention()` already calls the Zernio HTTP API directly (bypassing CLI), the same
+  pattern could be used for post creation. Check if Zernio's REST API has a
+  `POST /v1/accounts/{id}/posts` endpoint that accepts a `mentions` array alongside the text.
+  This would require a new `publishPostViaApi()` function in `zernio.js`.
+
+  ### 2. Check for undocumented Zernio CLI flags
+  Run `npx zernio posts:create --mentions '[{"urn":"...","name":"..."}]' --text "..."` to test
+  if an undocumented `--mentions` flag exists. CLI help may not show all available options.
+
+  ### 3. Contact Zernio support / check Zernio API docs
+  The Zernio platform may have documentation for mention-aware post creation that isn't
+  exposed through the CLI.
+
+  ### 4. Wire mentions through the existing pipeline
+  Even without a CLI flag, ensure `cli.js` (publish:confirm) extracts mentions from
+  `intent.postOptions.mentions` and passes them to `publishPost()` — so when a mention
+  solution is found, the data pipeline is ready.

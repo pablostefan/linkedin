@@ -41,12 +41,12 @@ describe("zernio", () => {
   }
 
   describe("getStatus", () => {
-    it("calls npx zernio status", async () => {
+    it("calls npx zernio auth:check", async () => {
       fakeExecFileSuccess({ ok: true });
       const result = await getStatus();
       assert.deepEqual(result, { ok: true });
       const args = lastCallArgs();
-      assert.deepEqual(args, ["zernio", "status"]);
+      assert.deepEqual(args, ["zernio", "auth:check"]);
     });
 
     it("rejects when CLI fails", async () => {
@@ -65,17 +65,16 @@ describe("zernio", () => {
       await publishPost({ content: "Hello", accountId: "acc-1" });
       const args = lastCallArgs();
       assert.deepEqual(args, [
-        "zernio", "post", "create",
-        "--content", "Hello",
-        "--account-id", "acc-1",
-        "--platform", "linkedin"
+        "zernio", "posts:create",
+        "--text", "Hello",
+        "--accounts", "acc-1"
       ]);
     });
 
-    it("includes --publish-now when option set", async () => {
+    it("does not include unsupported --publish-now flag", async () => {
       fakeExecFileSuccess({ id: "post-1" });
       await publishPost({ content: "Hi", accountId: "acc-1", options: { publishNow: true } });
-      assert.ok(lastCallArgs().includes("--publish-now"));
+      assert.ok(!lastCallArgs().includes("--publish-now"));
     });
 
     it("includes --draft when option set", async () => {
@@ -88,7 +87,7 @@ describe("zernio", () => {
       fakeExecFileSuccess({ id: "post-1" });
       await publishPost({ content: "Hi", accountId: "acc-1", options: { scheduledFor: "2025-01-01T10:00:00Z" } });
       const args = lastCallArgs();
-      const idx = args.indexOf("--scheduled-for");
+      const idx = args.indexOf("--scheduledAt");
       assert.ok(idx >= 0);
       assert.equal(args[idx + 1], "2025-01-01T10:00:00Z");
     });
@@ -110,33 +109,30 @@ describe("zernio", () => {
         options: { scheduledFor: "2025-07-01T09:00:00Z", timezone: "America/Sao_Paulo" }
       });
       const args = lastCallArgs();
-      assert.ok(args.includes("--scheduled-for"));
+      assert.ok(args.includes("--scheduledAt"));
       assert.ok(args.includes("--timezone"));
-      assert.equal(args[args.indexOf("--scheduled-for") + 1], "2025-07-01T09:00:00Z");
+      assert.equal(args[args.indexOf("--scheduledAt") + 1], "2025-07-01T09:00:00Z");
       assert.equal(args[args.indexOf("--timezone") + 1], "America/Sao_Paulo");
     });
 
-    it("includes --organization-urn when provided", async () => {
+    it("does not include unsupported organization flag", async () => {
       fakeExecFileSuccess({ id: "post-1" });
       await publishPost({ content: "Hi", accountId: "acc-1", options: { organizationUrn: "urn:li:organization:123" } });
       const args = lastCallArgs();
-      assert.ok(args.includes("--organization-urn"));
-      assert.ok(args.includes("urn:li:organization:123"));
+      assert.ok(!args.includes("--organization-urn"));
     });
 
-    it("includes --first-comment when provided", async () => {
+    it("does not include unsupported first comment flag", async () => {
       fakeExecFileSuccess({ id: "post-1" });
       await publishPost({ content: "Hi", accountId: "acc-1", options: { firstComment: "link here" } });
       const args = lastCallArgs();
-      const idx = args.indexOf("--first-comment");
-      assert.ok(idx >= 0);
-      assert.equal(args[idx + 1], "link here");
+      assert.ok(!args.includes("--first-comment"));
     });
 
-    it("includes --disable-link-preview when set", async () => {
+    it("does not include unsupported disable link preview flag", async () => {
       fakeExecFileSuccess({ id: "post-1" });
       await publishPost({ content: "Hi", accountId: "acc-1", options: { disableLinkPreview: true } });
-      assert.ok(lastCallArgs().includes("--disable-link-preview"));
+      assert.ok(!lastCallArgs().includes("--disable-link-preview"));
     });
 
     it("joins hashtags with comma", async () => {
@@ -157,12 +153,13 @@ describe("zernio", () => {
       assert.equal(args[idx + 1], "tag1,tag2");
     });
 
-    it("adds --image for each imagePath", async () => {
+    it("joins image paths into --media", async () => {
       fakeExecFileSuccess({ id: "post-1" });
       await publishPost({ content: "Hi", accountId: "acc-1", options: { imagePaths: ["/a.png", "/b.png"] } });
       const args = lastCallArgs();
-      const imageArgs = args.filter((a) => a === "--image");
-      assert.equal(imageArgs.length, 2);
+      const idx = args.indexOf("--media");
+      assert.ok(idx >= 0);
+      assert.equal(args[idx + 1], "/a.png,/b.png");
     });
   });
 
@@ -172,8 +169,8 @@ describe("zernio", () => {
       await getAnalytics({ accountId: "acc-1" });
       const args = lastCallArgs();
       assert.deepEqual(args, [
-        "zernio", "analytics", "get",
-        "--account-id", "acc-1",
+        "zernio", "analytics:posts",
+        "--accountId", "acc-1",
         "--platform", "linkedin"
       ]);
     });
@@ -182,7 +179,7 @@ describe("zernio", () => {
       fakeExecFileSuccess({ data: [] });
       await getAnalytics({ accountId: "acc-1", profileId: "prof-1" });
       const args = lastCallArgs();
-      assert.ok(args.includes("--profile-id"));
+      assert.ok(args.includes("--profileId"));
       assert.ok(args.includes("prof-1"));
     });
 
@@ -199,32 +196,50 @@ describe("zernio", () => {
         }
       });
       const args = lastCallArgs();
-      assert.ok(args.includes("--post-id"));
-      assert.ok(args.includes("--from-date"));
-      assert.ok(args.includes("--to-date"));
+      assert.ok(args.includes("--postId"));
+      assert.ok(args.includes("--fromDate"));
+      assert.ok(args.includes("--toDate"));
       assert.ok(args.includes("--limit"));
-      assert.ok(args.includes("--sort-by"));
+      assert.ok(args.includes("--sortBy"));
       assert.ok(args.includes("10"));
       assert.ok(args.includes("impressions"));
     });
   });
 
   describe("resolveMention", () => {
-    it("builds correct args", async () => {
-      fakeExecFileSuccess({ urn: "urn:li:person:abc" });
-      await resolveMention({ nameOrUrl: "https://linkedin.com/in/someone" });
-      const args = lastCallArgs();
-      assert.deepEqual(args, [
-        "zernio", "linkedin", "resolve-mention",
-        "--query", "https://linkedin.com/in/someone"
-      ]);
-    });
+    it("calls mention endpoint and returns parsed result", async () => {
+      const original = process.env.ZERNIO_API_KEY;
+      process.env.ZERNIO_API_KEY = "sk_test_key";
 
-    it("returns parsed JSON result", async () => {
-      fakeExecFileSuccess({ urn: "urn:li:person:abc", name: "Someone" });
-      const result = await resolveMention({ nameOrUrl: "Someone" });
+      const fetchMock = mock.method(globalThis, "fetch", async (url, options) => {
+        assert.match(String(url), /\/accounts\/acc-1\/linkedin-mentions/);
+        assert.match(String(url), /displayName=Someone(\+|%20)Name/);
+        assert.equal(options.headers.Authorization, "Bearer sk_test_key");
+
+        return {
+          ok: true,
+          text: async () => JSON.stringify({
+            urn: "urn:li:person:abc",
+            mentionFormat: "@[Someone Name](urn:li:person:abc)"
+          })
+        };
+      });
+
+      const result = await resolveMention({
+        accountId: "acc-1",
+        nameOrUrl: "https://linkedin.com/in/someone",
+        displayName: "Someone Name"
+      });
+
       assert.equal(result.urn, "urn:li:person:abc");
-      assert.equal(result.name, "Someone");
+      assert.equal(result.mentionFormat, "@[Someone Name](urn:li:person:abc)");
+
+      fetchMock.mock.restore();
+      if (original) {
+        process.env.ZERNIO_API_KEY = original;
+      } else {
+        delete process.env.ZERNIO_API_KEY;
+      }
     });
   });
 

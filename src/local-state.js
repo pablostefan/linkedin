@@ -163,7 +163,6 @@ async function readUtf8File(filePath) {
 }
 
 export function createLocalState(appConfig) {
-  const intents = new Map();
 
   async function ensureLocalDataDir() {
     await fs.mkdir(appConfig.localDataDir, { recursive: true });
@@ -214,6 +213,25 @@ export function createLocalState(appConfig) {
 
     await writeJsonFileAtomically(appConfig.draftsFilePath, store);
     await writeJsonFile(appConfig.draftsBackupFilePath, store);
+  }
+
+  async function loadIntentsStore() {
+    await ensureLocalDataDir();
+    const raw = await readUtf8File(appConfig.publishIntentsFilePath);
+    if (!raw) {
+      return new Map();
+    }
+    try {
+      const parsed = JSON.parse(raw);
+      return new Map(Object.entries(parsed));
+    } catch {
+      return new Map();
+    }
+  }
+
+  async function saveIntentsStore(intentsMap) {
+    await ensureLocalDataDir();
+    await writeJsonFileAtomically(appConfig.publishIntentsFilePath, Object.fromEntries(intentsMap));
   }
 
   async function listDrafts() {
@@ -303,15 +321,15 @@ export function createLocalState(appConfig) {
     return entries.slice(-limit).reverse();
   }
 
-  function purgeExpiredIntents(now = Date.now()) {
-    for (const [confirmationId, intent] of intents.entries()) {
+  function purgeExpiredIntents(intentsMap, now = Date.now()) {
+    for (const [confirmationId, intent] of intentsMap.entries()) {
       if (Date.parse(intent.expiresAt) <= now) {
-        intents.delete(confirmationId);
+        intentsMap.delete(confirmationId);
       }
     }
   }
 
-  function createPublishIntent({ draftId = null, content, postOptions, rawContent = null, scheduledFor = null, timezone = null }) {
+  async function createPublishIntent({ draftId = null, content, postOptions, rawContent = null, scheduledFor = null, timezone = null }) {
     const normalizedContent = typeof content === "string" ? content.trim() : "";
 
     if (!normalizedContent) {
@@ -337,8 +355,10 @@ export function createLocalState(appConfig) {
       consumedAt: null
     };
 
-    purgeExpiredIntents(now);
-    intents.set(confirmationId, intent);
+    const intentsMap = await loadIntentsStore();
+    purgeExpiredIntents(intentsMap, now);
+    intentsMap.set(confirmationId, intent);
+    await saveIntentsStore(intentsMap);
 
     return {
       confirmationId: intent.confirmationId,
@@ -352,13 +372,14 @@ export function createLocalState(appConfig) {
     };
   }
 
-  function consumePublishIntent(confirmationId) {
+  async function consumePublishIntent(confirmationId) {
     const now = Date.now();
-
-    const intent = intents.get(confirmationId);
+    const intentsMap = await loadIntentsStore();
+    const intent = intentsMap.get(confirmationId);
 
     if (!intent) {
-      purgeExpiredIntents(now);
+      purgeExpiredIntents(intentsMap, now);
+      await saveIntentsStore(intentsMap);
 
       return {
         ok: false,
@@ -369,8 +390,9 @@ export function createLocalState(appConfig) {
     }
 
     if (Date.parse(intent.expiresAt) <= now) {
-      intents.delete(confirmationId);
-      purgeExpiredIntents(now);
+      intentsMap.delete(confirmationId);
+      purgeExpiredIntents(intentsMap, now);
+      await saveIntentsStore(intentsMap);
 
       return {
         ok: false,
@@ -390,8 +412,9 @@ export function createLocalState(appConfig) {
     }
 
     intent.consumedAt = new Date(now).toISOString();
-    intents.set(confirmationId, intent);
-    purgeExpiredIntents(now);
+    intentsMap.set(confirmationId, intent);
+    purgeExpiredIntents(intentsMap, now);
+    await saveIntentsStore(intentsMap);
 
     return {
       ok: true,
