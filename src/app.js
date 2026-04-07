@@ -13,6 +13,124 @@ import {
 } from "./linkedin.js";
 import { DraftStoreCorruptedError, createLocalState } from "./local-state.js";
 
+function normalizePostComparisonText(value) {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  return value
+    .normalize("NFKC")
+    .replace(/\u00a0/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function tokenizePostComparisonText(value) {
+  return normalizePostComparisonText(value)
+    .replace(/[^\p{L}\p{N}\s#]/gu, " ")
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 3);
+}
+
+function calculateTextSimilarity(leftText, rightText) {
+  const leftTokens = [...new Set(tokenizePostComparisonText(leftText))];
+  const rightTokens = [...new Set(tokenizePostComparisonText(rightText))];
+
+  if (leftTokens.length === 0 || rightTokens.length === 0) {
+    return 0;
+  }
+
+  const rightTokenSet = new Set(rightTokens);
+  const overlapCount = leftTokens.filter((token) => rightTokenSet.has(token)).length;
+  const denominator = Math.max(leftTokens.length, rightTokens.length);
+
+  if (denominator === 0) {
+    return 0;
+  }
+
+  const overlapRatio = overlapCount / denominator;
+  const shorterCoverage = overlapCount / Math.min(leftTokens.length, rightTokens.length);
+
+  return Number(((overlapRatio * 0.7) + (shorterCoverage * 0.3)).toFixed(4));
+}
+
+function buildMatchedPostSummary(syncedPost, matchType, similarityScore = null) {
+  return {
+    postKey: syncedPost.postKey,
+    url: syncedPost.url || null,
+    publishedAt: syncedPost.publishedAt || null,
+    publishedAtText: syncedPost.publishedAtText || null,
+    excerpt: buildPostExcerpt(syncedPost.text),
+    matchType,
+    similarityScore
+  };
+}
+
+function buildPostExcerpt(text, maxLength = 160) {
+  const normalizedText = typeof text === "string" ? text.replace(/\s+/g, " ").trim() : "";
+
+  if (!normalizedText) {
+    return null;
+  }
+
+  if (normalizedText.length <= maxLength) {
+    return normalizedText;
+  }
+
+  return `${normalizedText.slice(0, maxLength - 1).trim()}...`;
+}
+
+async function findDuplicatePost(localState, content) {
+  const normalizedContent = normalizePostComparisonText(content);
+
+  if (!normalizedContent) {
+    return {
+      hasDuplicate: false,
+      match: null
+    };
+  }
+
+  const postsStore = await localState.loadSyncPostsStore();
+  const similarMatches = [];
+
+  for (const syncedPost of postsStore.posts || []) {
+    const normalizedPostText = normalizePostComparisonText(syncedPost.text);
+
+    if (!normalizedPostText) {
+      continue;
+    }
+
+    if (normalizedPostText === normalizedContent) {
+      return {
+        status: "exact",
+        hasDuplicate: true,
+        hasSimilar: false,
+        match: buildMatchedPostSummary(syncedPost, "exact", 1),
+        similarMatches: []
+      };
+    }
+
+    const similarityScore = calculateTextSimilarity(normalizedContent, normalizedPostText);
+
+    if (similarityScore >= 0.72) {
+      similarMatches.push(buildMatchedPostSummary(syncedPost, "similar", similarityScore));
+    }
+  }
+
+  similarMatches.sort((left, right) => (right.similarityScore || 0) - (left.similarityScore || 0));
+  const topSimilarMatches = similarMatches.slice(0, 3);
+
+  return {
+    status: topSimilarMatches.length > 0 ? "similar" : "none",
+    hasDuplicate: false,
+    hasSimilar: topSimilarMatches.length > 0,
+    match: topSimilarMatches[0] || null,
+    similarMatches: topSimilarMatches
+  };
+}
+
 function clearSessionAuth(req) {
   delete req.session.linkedinAccessToken;
   delete req.session.linkedinUser;
@@ -282,11 +400,20 @@ POST /logout</pre>
   }));
 
   app.post("/operator/drafts", asyncHandler(async (req, res) => {
+    const duplicateCheck = await findDuplicatePost(localState, req.body?.content);
     const draft = await localState.saveDraft({
       content: req.body?.content
     });
 
-    res.status(201).json(draft);
+    res.status(201).json({
+      ...draft,
+      duplicateCheck,
+      warning: duplicateCheck.hasDuplicate
+        ? "Ja existe um post igual sincronizado no LinkedIn."
+        : duplicateCheck.hasSimilar
+          ? "Encontramos posts parecidos no historico sincronizado."
+          : null
+    });
   }));
 
   app.get("/operator/drafts/:draftId", asyncHandler(async (req, res) => {
@@ -312,12 +439,21 @@ POST /logout</pre>
       });
     }
 
+    const duplicateCheck = await findDuplicatePost(localState, req.body?.content);
     const draft = await localState.saveDraft({
       draftId: req.params.draftId,
       content: req.body?.content
     });
 
-    return res.json(draft);
+    return res.json({
+      ...draft,
+      duplicateCheck,
+      warning: duplicateCheck.hasDuplicate
+        ? "Ja existe um post igual sincronizado no LinkedIn."
+        : duplicateCheck.hasSimilar
+          ? "Encontramos posts parecidos no historico sincronizado."
+          : null
+    });
   }));
 
   app.delete("/operator/drafts/:draftId", asyncHandler(async (req, res) => {
@@ -352,6 +488,7 @@ POST /logout</pre>
 
     let draftId = req.body?.draftId || null;
     let content = req.body?.content;
+    const allowDuplicate = req.body?.allowDuplicate === true;
 
     if (draftId) {
       const draft = await localState.getDraft(draftId);
@@ -366,9 +503,27 @@ POST /logout</pre>
       content = draft.content;
     }
 
+    const duplicateCheck = await findDuplicatePost(localState, content);
+
+    if (duplicateCheck.hasDuplicate && !allowDuplicate) {
+      return res.status(409).json({
+        error: "duplicate_post_detected",
+        message: "Ja existe um post sincronizado com o mesmo conteudo em posts.json. Revise o texto ou confirme com allowDuplicate=true se quiser publicar mesmo assim.",
+        draftId,
+        duplicateCheck
+      });
+    }
+
     const intent = localState.createPublishIntent({ draftId, content });
 
-    return res.status(201).json(intent);
+    return res.status(201).json({
+      ...intent,
+      duplicateCheck,
+      allowDuplicate,
+      warning: duplicateCheck.hasSimilar && !duplicateCheck.hasDuplicate
+        ? "Encontramos posts parecidos no historico sincronizado. Revise antes de publicar."
+        : null
+    });
   }));
 
   app.post("/operator/publish/confirm", asyncHandler(async (req, res) => {

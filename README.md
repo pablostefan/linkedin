@@ -11,11 +11,13 @@ Projeto minimo para conectar uma conta do LinkedIn via OAuth oficial, obter info
 - Preparacao e confirmacao obrigatoria antes de publicar
 - Historico local append-only em `.local/linkedin/publish-history.jsonl`
 - Tentativa opcional de listar posts do autor com `GET /posts`
+- Sincronizacao manual best effort de posts do proprio perfil via navegador em `.local/linkedin/sync/`
 
 ## Requisitos
 
 - Node.js 18+
 - Uma app criada em LinkedIn Developers
+- Chromium instalado pelo pacote `playwright` durante `npm install` ou via `npx playwright install chromium`
 
 ## Configuracao da app no LinkedIn
 
@@ -56,6 +58,7 @@ Campos principais:
 - `LINKEDIN_CLIENT_SECRET`
 - `SESSION_SECRET`
 - `LINKEDIN_API_VERSION`
+- `LINKEDIN_SYNC_START_URL` opcional para sobrescrever a pagina inicial do sync manual via navegador
 
 Observacoes:
 
@@ -101,6 +104,92 @@ Abra:
 12. Consulte o historico local com `npm run linkedin:history:list`.
 
 Todos os comandos imprimem JSON por padrao para facilitar o uso pelo Copilot no VS Code.
+
+## Sincronizacao manual via navegador
+
+O MVP de sync nao usa scheduler, watch nem loop recorrente. O comando roda uma vez, captura o que estiver visivel na pagina e persiste estado minimo para a proxima execucao incremental.
+
+Arquivos usados por esse fluxo:
+
+- `.local/linkedin/browser-profile/` para o perfil persistente do Chromium
+- `.local/linkedin/sync/posts.json` para os posts sincronizados
+- `.local/linkedin/sync/state.json` para o estado incremental minimo
+
+Comandos:
+
+```bash
+npm run linkedin:sync:status
+npm run linkedin:sync:run
+npm run linkedin:sync:list
+npm run linkedin:sync:backfill
+npm run linkedin:sync:backfill:deep
+```
+
+Opcoes uteis:
+
+```bash
+npm run linkedin:sync:run -- --start-url="https://www.linkedin.com/in/me/recent-activity/all/"
+npm run linkedin:sync:run -- --max-scrolls=8
+npm run linkedin:sync:run -- --headless=false
+npm run linkedin:sync:run -- --full-scan=true --enrich-all=true --max-scrolls=60
+```
+
+Fluxo esperado na primeira execucao:
+
+1. Rode `npm run linkedin:sync:run`.
+2. Se o LinkedIn abrir tela de login ou a sessao do perfil persistente estiver invalida, o Chromium permanece aberto por alguns minutos para voce concluir o login manualmente.
+3. Depois que o login for concluido no Chromium, o proprio comando tenta continuar a sincronizacao.
+4. Se o tempo expirar sem login, o comando falha com `browser_login_required`.
+5. Depois disso, as proximas execucoes reutilizam `.local/linkedin/browser-profile` no modo single-run local.
+
+Opcao util para aumentar a janela de login manual:
+
+```bash
+npm run linkedin:sync:run -- --login-timeout-ms=600000
+```
+
+Para varrer a pagina inteira e tentar trazer todos os posts visiveis do seu historico atual, use o backfill completo:
+
+```bash
+npm run linkedin:sync:backfill
+```
+
+Esse modo:
+
+- nao para no primeiro post ja conhecido
+- continua rolando ate o fim da pagina ou ate o limite configurado
+- prioriza velocidade e nao faz enriquecimento pesado por permalink
+
+Se voce quiser a versao mais lenta e profunda, com enriquecimento completo por permalink, use:
+
+```bash
+npm run linkedin:sync:backfill:deep -- --login-timeout-ms=600000
+```
+
+Consultar posts ja sincronizados sem abrir o JSON bruto:
+
+```bash
+npm run linkedin:sync:list
+npm run linkedin:sync:list -- --limit=5
+npm run linkedin:sync:list -- --query="XP"
+npm run linkedin:sync:list -- --query="XP" -- --include-raw-metrics=true
+```
+
+Dados capturados no MVP, em best effort:
+
+- texto do post
+- data/hora visivel e timestamp normalizado, incluindo valores relativos como `5 d` e `2 sem` quando possivel
+- URL do post quando encontrada
+- tipo simples do post: `text`, `image`, `video`, `document` ou `article`
+- metricas visiveis quando parseaveis
+- indicadores simples de midia
+
+Limitacoes do sync MVP:
+
+- O scraper depende da estrutura atual do DOM do LinkedIn e pode degradar se a interface mudar.
+- A captura e best effort e prioriza uma unica fonte: o navegador autenticado.
+- Nao ha garantia de recuperar todo o historico em uma execucao; a abordagem e incremental e para uso manual.
+- O comando nao escreve em `.local/linkedin/publish-history.jsonl` e nao se mistura com o fluxo atual de publicacao.
 
 ## Re-auth e invalidez de token
 

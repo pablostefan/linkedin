@@ -21,11 +21,17 @@
     "linkedin:draft:delete": "node src/cli.js draft delete",
     "linkedin:publish:prepare": "node src/cli.js publish prepare",
     "linkedin:publish:confirm": "node src/cli.js publish confirm",
-    "linkedin:history:list": "node src/cli.js history list"
+    "linkedin:history:list": "node src/cli.js history list",
+    "linkedin:sync:run": "node src/cli.js sync run",
+    "linkedin:sync:status": "node src/cli.js sync status",
+    "linkedin:sync:list": "node src/cli.js sync list",
+    "linkedin:sync:backfill": "node src/cli.js sync run --full-scan=true --max-scrolls=60",
+    "linkedin:sync:backfill:deep": "node src/cli.js sync run --full-scan=true --enrich-all=true --max-scrolls=60"
   },
   "dependencies": {
     "dotenv": "^16.4.5",
     "express": "^4.21.2",
-    "express-session": "^1.18.1"
+    "express-session": "^1.18.1",
+    "playwright": "^1.53.0"
   }
 }

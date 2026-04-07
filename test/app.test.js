@@ -28,6 +28,9 @@ async function startTestServer({ stateDir, publishIntentTtlMs = 10 * 60 * 1000, 
     authFilePath: path.join(localDataDir, "auth.json"),
     draftsFilePath: path.join(localDataDir, "drafts.json"),
     draftsBackupFilePath: path.join(localDataDir, "drafts.backup.json"),
+    syncDirPath: path.join(localDataDir, "sync"),
+    syncPostsFilePath: path.join(localDataDir, "sync", "posts.json"),
+    syncStateFilePath: path.join(localDataDir, "sync", "state.json"),
     publishHistoryFilePath: path.join(localDataDir, "publish-history.jsonl"),
     publishIntentTtlMs
   };
@@ -104,6 +107,9 @@ function createTestConfig(localDataDir, overrides = {}) {
     authFilePath: path.join(localDataDir, "auth.json"),
     draftsFilePath: path.join(localDataDir, "drafts.json"),
     draftsBackupFilePath: path.join(localDataDir, "drafts.backup.json"),
+    syncDirPath: path.join(localDataDir, "sync"),
+    syncPostsFilePath: path.join(localDataDir, "sync", "posts.json"),
+    syncStateFilePath: path.join(localDataDir, "sync", "state.json"),
     publishHistoryFilePath: path.join(localDataDir, "publish-history.jsonl"),
     publishIntentTtlMs: 10 * 60 * 1000,
     ...overrides
@@ -238,6 +244,84 @@ test("draft CRUD endpoints create, update, list, and delete persisted drafts", a
   }
 });
 
+test("draft create returns duplicate metadata when the content already exists in synced posts", async () => {
+  const harness = await startTestServer();
+
+  try {
+    await harness.localState.saveSyncPostsStore({
+      version: 1,
+      posts: [
+        {
+          postKey: "urn:li:activity:1",
+          url: "https://www.linkedin.com/feed/update/urn:li:activity:1/",
+          text: "Post ja sincronizado no LinkedIn",
+          publishedAt: "2026-04-01T12:00:00.000Z",
+          publishedAtText: "2026-04-01"
+        }
+      ]
+    });
+
+    const createResponse = await fetch(`${harness.baseUrl}/operator/drafts`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ content: "Post ja sincronizado no LinkedIn" })
+    });
+    const payload = await createResponse.json();
+
+    assert.equal(createResponse.status, 201);
+    assert.equal(payload.warning, "Ja existe um post igual sincronizado no LinkedIn.");
+    assert.equal(payload.duplicateCheck.status, "exact");
+    assert.equal(payload.duplicateCheck.hasDuplicate, true);
+    assert.equal(payload.duplicateCheck.hasSimilar, false);
+    assert.equal(payload.duplicateCheck.match.postKey, "urn:li:activity:1");
+    assert.equal(payload.duplicateCheck.match.matchType, "exact");
+  } finally {
+    await harness.close();
+  }
+});
+
+test("draft create returns similar match candidates for close content", async () => {
+  const harness = await startTestServer();
+
+  try {
+    await harness.localState.saveSyncPostsStore({
+      version: 1,
+      posts: [
+        {
+          postKey: "urn:li:activity:3",
+          url: "https://www.linkedin.com/feed/update/urn:li:activity:3/",
+          text: "Flutter com foco no mercado enterprise e estabilidade para grandes aplicacoes corporativas.",
+          publishedAt: "2026-04-01T12:00:00.000Z",
+          publishedAtText: "2026-04-01"
+        }
+      ]
+    });
+
+    const createResponse = await fetch(`${harness.baseUrl}/operator/drafts`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ content: "Flutter com foco no mercado enterprise e mais estabilidade para grandes aplicacoes." })
+    });
+    const payload = await createResponse.json();
+
+    assert.equal(createResponse.status, 201);
+    assert.equal(payload.warning, "Encontramos posts parecidos no historico sincronizado.");
+    assert.equal(payload.duplicateCheck.status, "similar");
+    assert.equal(payload.duplicateCheck.hasDuplicate, false);
+    assert.equal(payload.duplicateCheck.hasSimilar, true);
+    assert.equal(payload.duplicateCheck.similarMatches.length, 1);
+    assert.equal(payload.duplicateCheck.similarMatches[0].postKey, "urn:li:activity:3");
+    assert.equal(payload.duplicateCheck.similarMatches[0].matchType, "similar");
+    assert.ok(payload.duplicateCheck.similarMatches[0].similarityScore >= 0.72);
+  } finally {
+    await harness.close();
+  }
+});
+
 test("startServer binds on the configured localhost host and serves the bootstrap app", async () => {
   const workspaceDir = await createTempDir();
   const localDataDir = path.join(workspaceDir, ".local", "linkedin");
@@ -304,6 +388,91 @@ test("publish confirm rejects invalid confirmation IDs and records the failure",
     assert.equal(response.status, 400);
     assert.equal(payload.error, "invalid_confirmation_id");
     assert.match(history, /invalid_confirmation_id/);
+  } finally {
+    await harness.close();
+  }
+});
+
+test("publish prepare blocks duplicate content unless allowDuplicate is true", async () => {
+  const harness = await startTestServer();
+  await writePersistedAuth(harness.config.authFilePath);
+
+  try {
+    await harness.localState.saveSyncPostsStore({
+      version: 1,
+      posts: [
+        {
+          postKey: "urn:li:activity:2",
+          url: "https://www.linkedin.com/feed/update/urn:li:activity:2/",
+          text: "Nao publique isso de novo",
+          publishedAt: "2026-04-03T12:00:00.000Z",
+          publishedAtText: "2026-04-03"
+        }
+      ]
+    });
+
+    const blockedResponse = await fetch(`${harness.baseUrl}/operator/publish/prepare`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ content: "Nao publique isso de novo" })
+    });
+    const blockedPayload = await blockedResponse.json();
+
+    const allowedResponse = await fetch(`${harness.baseUrl}/operator/publish/prepare`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ content: "Nao publique isso de novo", allowDuplicate: true })
+    });
+    const allowedPayload = await allowedResponse.json();
+
+    assert.equal(blockedResponse.status, 409);
+    assert.equal(blockedPayload.error, "duplicate_post_detected");
+    assert.equal(blockedPayload.duplicateCheck.hasDuplicate, true);
+    assert.equal(allowedResponse.status, 201);
+    assert.equal(allowedPayload.allowDuplicate, true);
+    assert.equal(allowedPayload.duplicateCheck.hasDuplicate, true);
+  } finally {
+    await harness.close();
+  }
+});
+
+test("publish prepare returns a warning when similar synced posts are found", async () => {
+  const harness = await startTestServer();
+  await writePersistedAuth(harness.config.authFilePath);
+
+  try {
+    await harness.localState.saveSyncPostsStore({
+      version: 1,
+      posts: [
+        {
+          postKey: "urn:li:activity:4",
+          url: "https://www.linkedin.com/feed/update/urn:li:activity:4/",
+          text: "Estou compartilhando uma vaga senior para trabalhar com C e .NET em Sao Paulo.",
+          publishedAt: "2026-04-03T12:00:00.000Z",
+          publishedAtText: "2026-04-03"
+        }
+      ]
+    });
+
+    const response = await fetch(`${harness.baseUrl}/operator/publish/prepare`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ content: "Estou compartilhando uma vaga senior para trabalhar com C e .NET em Sao Paulo e modelo hibrido." })
+    });
+    const payload = await response.json();
+
+    assert.equal(response.status, 201);
+    assert.equal(payload.warning, "Encontramos posts parecidos no historico sincronizado. Revise antes de publicar.");
+    assert.equal(payload.duplicateCheck.status, "similar");
+    assert.equal(payload.duplicateCheck.hasDuplicate, false);
+    assert.equal(payload.duplicateCheck.hasSimilar, true);
+    assert.equal(payload.duplicateCheck.similarMatches[0].postKey, "urn:li:activity:4");
   } finally {
     await harness.close();
   }

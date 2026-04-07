@@ -1,4 +1,5 @@
 import { config } from "./config.js";
+import { createLocalState } from "./local-state.js";
 
 function parseArgs(argv) {
   const flags = {};
@@ -70,6 +71,60 @@ function resolveContent(flags) {
   return flags.content || null;
 }
 
+function resolveBooleanFlag(flags, name, fallback = false) {
+  const value = flags[name];
+
+  if (value === undefined) {
+    return fallback;
+  }
+
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  return ["1", "true", "yes", "on"].includes(String(value).toLowerCase());
+}
+
+function resolveMaxScrolls(flags) {
+  const rawValue = flags["max-scrolls"];
+
+  if (rawValue === undefined) {
+    return undefined;
+  }
+
+  const parsedValue = Number(rawValue);
+
+  return Number.isFinite(parsedValue) ? parsedValue : undefined;
+}
+
+function resolveLoginTimeoutMs(flags) {
+  const rawValue = flags["login-timeout-ms"];
+
+  if (rawValue === undefined) {
+    return undefined;
+  }
+
+  const parsedValue = Number(rawValue);
+
+  return Number.isFinite(parsedValue) && parsedValue > 0 ? parsedValue : undefined;
+}
+
+function resolveLimit(flags) {
+  const rawValue = flags.limit;
+
+  if (rawValue === undefined) {
+    return undefined;
+  }
+
+  const parsedValue = Number(rawValue);
+  return Number.isFinite(parsedValue) && parsedValue > 0 ? parsedValue : undefined;
+}
+
+function resolveStringFlag(flags, name) {
+  const value = flags[name];
+  return value === undefined ? undefined : String(value);
+}
+
 async function main() {
   const [domain, action, ...rest] = process.argv.slice(2);
   const { flags, positionals } = parseArgs(rest);
@@ -77,7 +132,7 @@ async function main() {
   if (!domain) {
     printJson({
       error: "missing_command",
-      message: "Use auth, posts, draft, publish, or history commands."
+      message: "Use auth, posts, draft, publish, history, or sync commands."
     });
     process.exitCode = 1;
     return;
@@ -94,6 +149,57 @@ async function main() {
         message: "Open the URL in your browser to authenticate LinkedIn for the local operator workflow."
       };
       printJson(result);
+      return;
+    }
+
+    if (domain === "sync" && action === "run") {
+      const { runLinkedinBrowserSync } = await import("./linkedin-sync.js");
+      result = {
+        ok: true,
+        status: 200,
+        payload: await runLinkedinBrowserSync({
+          appConfig: config,
+          localState: createLocalState(config),
+          startUrl: flags["start-url"] || config.linkedinSyncStartUrl,
+          headless: resolveBooleanFlag(flags, "headless", false),
+          maxScrolls: resolveMaxScrolls(flags),
+          loginTimeoutMs: resolveLoginTimeoutMs(flags),
+          fullScan: resolveBooleanFlag(flags, "full-scan", false),
+          enrichAll: resolveBooleanFlag(flags, "enrich-all", false)
+        })
+      };
+      printJson(result.payload);
+      return;
+    }
+
+    if (domain === "sync" && action === "status") {
+      const { getLinkedinSyncStatus } = await import("./linkedin-sync.js");
+      result = {
+        ok: true,
+        status: 200,
+        payload: await getLinkedinSyncStatus({
+          appConfig: config,
+          localState: createLocalState(config)
+        })
+      };
+      printJson(result.payload);
+      return;
+    }
+
+    if (domain === "sync" && action === "list") {
+      const { listLinkedinSyncPosts } = await import("./linkedin-sync.js");
+      result = {
+        ok: true,
+        status: 200,
+        payload: await listLinkedinSyncPosts({
+          appConfig: config,
+          localState: createLocalState(config),
+          limit: resolveLimit(flags),
+          query: resolveStringFlag(flags, "query") || null,
+          includeRawMetrics: resolveBooleanFlag(flags, "include-raw-metrics", false)
+        })
+      };
+      printJson(result.payload);
       return;
     }
 
@@ -119,7 +225,8 @@ async function main() {
     } else if (domain === "publish" && action === "prepare") {
       result = await requestJson("POST", "/operator/publish/prepare", {
         draftId: flags["draft-id"] || null,
-        content: resolveContent(flags)
+        content: resolveContent(flags),
+        allowDuplicate: resolveBooleanFlag(flags, "allow-duplicate", false)
       });
     } else if (domain === "publish" && action === "confirm") {
       result = await requestJson("POST", "/operator/publish/confirm", {
@@ -132,7 +239,7 @@ async function main() {
     } else {
       printJson({
         error: "unknown_command",
-        message: "Supported commands: auth status|login, posts list, draft create|list|show|update|delete, publish prepare|confirm, history list."
+        message: "Supported commands: auth status|login, posts list, draft create|list|show|update|delete, publish prepare|confirm, history list, sync run|status|list."
       });
       process.exitCode = 1;
       return;
@@ -144,6 +251,29 @@ async function main() {
       process.exitCode = 1;
     }
   } catch (error) {
+    if (error.code === "browser_login_required" || error.code === "sync_failed" || error.code === "sync_store_corrupted") {
+      printJson({
+        error: error.code,
+        message: error.message,
+        reauthRequired: error.code === "browser_login_required",
+        browserProfilePath: config.browserProfileDirPath,
+        startUrl: config.linkedinSyncStartUrl
+      });
+      process.exitCode = 1;
+      return;
+    }
+
+    if (domain === "sync") {
+      printJson({
+        error: error.code || "sync_failed",
+        message: error.message,
+        browserProfilePath: config.browserProfileDirPath,
+        startUrl: flags["start-url"] || config.linkedinSyncStartUrl
+      });
+      process.exitCode = 1;
+      return;
+    }
+
     printJson({
       error: "server_unreachable",
       message: "The local operator server is not reachable. Start `npm run dev` and retry.",

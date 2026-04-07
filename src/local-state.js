@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 
 const DRAFT_STORE_VERSION = 1;
+const SYNC_STORE_VERSION = 1;
 
 export class DraftStoreCorruptedError extends Error {
   constructor(filePath, backupPath, cause) {
@@ -15,6 +16,16 @@ export class DraftStoreCorruptedError extends Error {
     this.code = "drafts_file_corrupted";
     this.filePath = filePath;
     this.backupPath = backupPath;
+    this.cause = cause;
+  }
+}
+
+export class SyncStoreCorruptedError extends Error {
+  constructor(filePath, cause) {
+    super(`LinkedIn sync store is corrupted at ${filePath}.`);
+    this.name = "SyncStoreCorruptedError";
+    this.code = "sync_store_corrupted";
+    this.filePath = filePath;
     this.cause = cause;
   }
 }
@@ -46,6 +57,18 @@ export function createLocalState(appConfig) {
 
   async function writeJsonFile(filePath, payload) {
     await fs.writeFile(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  }
+
+  async function writeJsonFileAtomically(filePath, payload) {
+    const serializedPayload = `${JSON.stringify(payload, null, 2)}\n`;
+    const tempFilePath = `${filePath}.${crypto.randomUUID()}.tmp`;
+
+    await fs.writeFile(tempFilePath, serializedPayload, "utf8");
+    await fs.rename(tempFilePath, filePath);
+  }
+
+  async function ensureSyncDir() {
+    await fs.mkdir(appConfig.syncDirPath, { recursive: true });
   }
 
   function buildReauthState(reason, message) {
@@ -167,12 +190,90 @@ export function createLocalState(appConfig) {
   async function writeDraftStoreAtomically(store) {
     await ensureLocalDataDir();
 
-    const payload = `${JSON.stringify(store, null, 2)}\n`;
-    const tempFilePath = `${appConfig.draftsFilePath}.${crypto.randomUUID()}.tmp`;
+    await writeJsonFileAtomically(appConfig.draftsFilePath, store);
+    await writeJsonFile(appConfig.draftsBackupFilePath, store);
+  }
 
-    await fs.writeFile(tempFilePath, payload, "utf8");
-    await fs.rename(tempFilePath, appConfig.draftsFilePath);
-    await fs.writeFile(appConfig.draftsBackupFilePath, payload, "utf8");
+  async function loadSyncPostsStore() {
+    await ensureSyncDir();
+
+    const raw = await readUtf8File(appConfig.syncPostsFilePath);
+
+    if (!raw) {
+      return {
+        version: SYNC_STORE_VERSION,
+        posts: []
+      };
+    }
+
+    try {
+      const parsed = JSON.parse(raw);
+
+      return {
+        version: parsed.version || SYNC_STORE_VERSION,
+        posts: Array.isArray(parsed.posts) ? parsed.posts : []
+      };
+    } catch (error) {
+      throw new SyncStoreCorruptedError(appConfig.syncPostsFilePath, error);
+    }
+  }
+
+  async function loadSyncState() {
+    await ensureSyncDir();
+
+    const raw = await readUtf8File(appConfig.syncStateFilePath);
+
+    if (!raw) {
+      return {
+        version: SYNC_STORE_VERSION,
+        lastRunAt: null,
+        lastSuccessfulRunAt: null,
+        lastStartUrl: appConfig.linkedinSyncStartUrl,
+        lastStopReason: null,
+        lastError: null,
+        knownPostKeys: [],
+        totalPosts: 0
+      };
+    }
+
+    try {
+      const parsed = JSON.parse(raw);
+
+      return {
+        version: parsed.version || SYNC_STORE_VERSION,
+        lastRunAt: parsed.lastRunAt || null,
+        lastSuccessfulRunAt: parsed.lastSuccessfulRunAt || null,
+        lastStartUrl: parsed.lastStartUrl || appConfig.linkedinSyncStartUrl,
+        lastStopReason: parsed.lastStopReason || null,
+        lastError: parsed.lastError || null,
+        knownPostKeys: Array.isArray(parsed.knownPostKeys) ? parsed.knownPostKeys : [],
+        totalPosts: Number.isFinite(Number(parsed.totalPosts)) ? Number(parsed.totalPosts) : 0
+      };
+    } catch (error) {
+      throw new SyncStoreCorruptedError(appConfig.syncStateFilePath, error);
+    }
+  }
+
+  async function saveSyncPostsStore(store) {
+    await ensureSyncDir();
+    await writeJsonFileAtomically(appConfig.syncPostsFilePath, {
+      version: SYNC_STORE_VERSION,
+      posts: Array.isArray(store?.posts) ? store.posts : []
+    });
+  }
+
+  async function saveSyncState(state) {
+    await ensureSyncDir();
+    await writeJsonFileAtomically(appConfig.syncStateFilePath, {
+      version: SYNC_STORE_VERSION,
+      lastRunAt: state?.lastRunAt || null,
+      lastSuccessfulRunAt: state?.lastSuccessfulRunAt || null,
+      lastStartUrl: state?.lastStartUrl || appConfig.linkedinSyncStartUrl,
+      lastStopReason: state?.lastStopReason || null,
+      lastError: state?.lastError || null,
+      knownPostKeys: Array.isArray(state?.knownPostKeys) ? state.knownPostKeys : [],
+      totalPosts: Number.isFinite(Number(state?.totalPosts)) ? Number(state.totalPosts) : 0
+    });
   }
 
   async function listDrafts() {
@@ -358,8 +459,12 @@ export function createLocalState(appConfig) {
     listHistory,
     loadDraftStore,
     loadPersistedAuth,
+    loadSyncPostsStore,
+    loadSyncState,
     saveDraft,
     savePersistedAuth,
+    saveSyncPostsStore,
+    saveSyncState,
     writeDraftStoreAtomically
   };
 }
