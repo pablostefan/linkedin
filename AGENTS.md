@@ -1,73 +1,60 @@
-# AGENTS
+# AGENTES
 
-This repository is a local LinkedIn posting workflow for GitHub Copilot in VS Code.
+Este repositório é um workflow local de publicação no LinkedIn para GitHub Copilot no VS Code.
 
-## Architecture
+## Arquitetura
 
-The system uses **specialist agents** coordinated by a thin routing orchestrator. Each agent has one clear responsibility. The orchestrator (`LinkedIn Publishing Orchestrator`) only detects phases and delegates.
+O sistema gerencia o ciclo completo de posts no LinkedIn: criação de conteúdo (com assistência interativa do Post Editor), operações CLI via Draft Manager e publicação via Zernio.
 
-## Specialist Agents
+## Agentes
 
-| Agent | File | Responsibility |
-|:------|:-----|:---------------|
-| LinkedIn Publishing Orchestrator | `.github/agents/linkedin-publishing-orchestrator.agent.md` | Routing-only orchestrator. Detects phase, picks agent, passes results. |
-| LinkedIn Topic Interviewer | `.github/agents/linkedin-topic-interviewer.agent.md` | Clarifica tema, objetivo, audiência, ângulo e tom. Retorna creative brief. |
-| LinkedIn Editorial Memory | `.github/agents/linkedin-editorial-memory.agent.md` | Contexto histórico: temas cobertos, ângulos usados, gaps de conteúdo, cadência, performance. |
-| LinkedIn Post Critic | `.github/agents/linkedin-post-critic.agent.md` | Revisão editorial: hook, CTA, length, valor, repetição. |
-| LinkedIn Hook Optimizer | `.github/agents/linkedin-hook-optimizer.agent.md` | Avalia e otimiza hooks. Score, alternativas por tipo, análise de especificidade e tensão. |
-| LinkedIn Voice Validator | `.github/agents/linkedin-voice-validator.agent.md` | Valida voz do autor: emojis, travessões, tom, filler corporativo, drift estilístico, voice fingerprint. |
-| LinkedIn Fact Checker | `.github/agents/linkedin-fact-checker.agent.md` | Verifica claims factuais: dados numéricos, precisão técnica, atribuições, atualidade. |
-| LinkedIn Performance Coach | `.github/agents/linkedin-performance-coach.agent.md` | Analisa performance histórica e recomenda formato, tamanho, tipo de hook e timing. |
-| LinkedIn Format Strategist | `.github/agents/linkedin-format-strategist.agent.md` | Decide formato: text-only, article-preview, ou single-image. |
-| LinkedIn Visual Briefing | `.github/agents/linkedin-visual-briefing.agent.md` | Briefing visual e prompt para geração de imagem. |
-| LinkedIn Duplicate Guard | `.github/agents/linkedin-duplicate-guard.agent.md` | Verifica duplicatas: similarity scoring, hook fingerprint, theme clustering, engagement-weighted recency. |
-| LinkedIn Preview QA | `.github/agents/linkedin-preview-qa.agent.md` | Valida rendering: OG metadata, dimensões de imagem, limites de caracteres, integridade do draft. |
+| Agente | Arquivo | Responsabilidade |
+|:-------|:--------|:-----------------|
+| LinkedIn Publishing Orchestrator | `.github/agents/linkedin-publishing-orchestrator.agent.md` | Ponto de entrada para publicar posts. Recebe conteúdo do usuário (ou delega criação ao Post Editor) e coordena o fluxo. |
+| LinkedIn Post Editor | `.github/agents/linkedin-post-editor.agent.md` | Colaborar interativamente com o usuário para criar ou refinar o texto do post. |
 | LinkedIn Draft Manager | `.github/agents/linkedin-draft-manager.agent.md` | Executa operações CLI: criar/atualizar rascunho, prepare, confirm, history. |
 
-External agents (not in this repo): `reepl-linkedin` (copy generation), `gem-critic` (strategic challenge), `gem-designer` (visual asset critique), `Explore` (context gathering).
+## O Que os Agentes Devem Fazer
 
-## What Agents Should Do
+- Comunicar em português por padrão, salvo pedido de outro idioma.
+- Usar o CLI do projeto para criar, preparar e publicar posts.
+- O Post Editor pode auxiliar na criação e refinamento do texto, mas o usuário SEMPRE tem a decisão final.
+- Exigir confirmação explícita do usuário antes de `publish:confirm`.
 
-- Communicate in Portuguese by default unless the user asks for another language.
-- Draft LinkedIn posts in Portuguese by default.
-- Use the project CLI to create, review, prepare, and publish posts.
-- Default to draft-first behavior for any new post request.
-- Require explicit user confirmation before `publish:confirm`.
+## Workflow de Publicação
 
-## Post Workflow
+1. Verificar conectividade Zernio: `npm run linkedin:status`. Se falhar, verificar configuração com `npx zernio status`.
+2. Criar ou atualizar rascunho: `npm run linkedin:draft:create` ou `npm run linkedin:draft:update`
+5. Usar flags de article-preview quando o post deve renderizar um link card: `--article-source`, `--article-title`, `--article-description`
+6. Usar flags de imagem quando o post deve anexar uma imagem: `--image-path`, opcional `--image-alt`
+7. Inspecionar rascunho: `npm run linkedin:draft:show` ou `npm run linkedin:draft:list`
+8. Preparar publicação: `npm run linkedin:publish:prepare`
+9. Pedir ao usuário para confirmar o texto preparado exato
+10. Confirmar publicação: `npm run linkedin:publish:confirm`
+11. Verificar resultado: `npm run linkedin:history:list`
 
-1. Check Zernio connectivity: `npm run linkedin:status`. If it fails, verify config with `npx zernio status`.
-2. Create or update draft: `npm run linkedin:draft:create` or `npm run linkedin:draft:update`
-5. Use article-preview flags when the post should render a link card: `--article-source`, `--article-title`, `--article-description`
-6. Use image flags when the post should attach a single image: `--image-path`, optional `--image-alt`
-7. Inspect draft: `npm run linkedin:draft:show` or `npm run linkedin:draft:list`
-8. Prepare publish: `npm run linkedin:publish:prepare`
-9. Ask user to confirm the exact prepared text
-10. Confirm publish: `npm run linkedin:publish:confirm`
-11. Verify result: `npm run linkedin:history:list`
+### Posts Agendados
 
-### Scheduled Posts
-
-To schedule a post for future publication, pass `--scheduled-for` (ISO 8601 datetime) and optionally `--timezone` (IANA timezone, default "UTC") during the prepare step:
+Para agendar um post para publicação futura, passar `--scheduled-for` (datetime ISO 8601) e opcionalmente `--timezone` (timezone IANA, padrão "UTC") no passo de prepare:
 
 ```bash
 npm run linkedin:publish:prepare -- --draft-id=<uuid> --scheduled-for="2025-07-01T09:00:00Z" --timezone="America/Sao_Paulo"
 ```
 
-The confirm step automatically detects scheduling and sends `publishNow: false` to Zernio with the scheduling fields. The history entry records `scheduledFor` and `timezone` for auditing.
+O passo de confirm detecta automaticamente o agendamento e envia `publishNow: false` ao Zernio com os campos de agendamento. O registro no histórico grava `scheduledFor` e `timezone` para auditoria.
 
-## Constraints
+## Restrições
 
-- Publishing and analytics are handled by Zernio CLI (`npx zernio`). Config at `~/.zernio/config.json`.
-- Do not use direct `POST /posts` for publishing
-- Do not assume existing personal posts can be fetched from LinkedIn
-- Published posts are synced locally via `npm run linkedin:posts:sync` (stored in `.local/linkedin/zernio-posts.json`). Run sync before using agents that depend on post history
-- Person mentions in posts use LinkedIn little text in `commentary`, for example `@[Nome](urn:li:person:...)`
-- Profile URL to person URN resolution is available via `npm run linkedin:mention:resolve -- --url="URL"` or Zernio's resolver endpoint
+- Publicação e analytics são gerenciados pelo Zernio CLI (`npx zernio`). Configuração em `~/.zernio/config.json`.
+- Não usar `POST /posts` direto para publicar
+- Não assumir que posts pessoais existentes podem ser buscados do LinkedIn
+- Posts publicados são sincronizados localmente via `npm run linkedin:posts:sync` (armazenados em `.local/linkedin/zernio-posts.json`). Rodar sync antes de usar agentes que dependem do histórico de posts
+- Menções de pessoas em posts usam LinkedIn little text no `commentary`, por exemplo `@[Nome](urn:li:person:...)`
+- Resolução de URL de perfil para URN de pessoa disponível via `npm run linkedin:mention:resolve -- --url="URL"` ou endpoint resolver do Zernio
 
-## Local Data
+## Dados Locais
 
-- Drafts: `.local/linkedin/drafts.json`
-- Published posts: `.local/linkedin/zernio-posts.json` (synced via `npm run linkedin:posts:sync`)
-- History: `.local/linkedin/publish-history.jsonl` (local publish log)
-- Rich posts: draft payloads can now include article preview metadata or a single image attachment
+- Rascunhos: `.local/linkedin/drafts.json`
+- Posts publicados: `.local/linkedin/zernio-posts.json` (sincronizado via `npm run linkedin:posts:sync`)
+- Histórico: `.local/linkedin/publish-history.jsonl` (log local de publicações)
+- Posts ricos: payloads de rascunho podem incluir metadados de article preview ou anexo de imagem

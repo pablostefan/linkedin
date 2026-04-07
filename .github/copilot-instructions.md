@@ -1,40 +1,40 @@
-# LinkedIn Project Instructions
+# Instruções do Projeto LinkedIn
 
-This repository is a local LinkedIn posting assistant used from GitHub Copilot in VS Code.
+Este repositório é um assistente local de publicação no LinkedIn usado pelo GitHub Copilot no VS Code.
 
-## Primary Goal
+## Objetivo Principal
 
-- Help the user create and publish text posts to their personal LinkedIn profile through the local project workflow.
-- Prefer the project's CLI workflow over ad hoc HTTP calls.
+- Ajudar o usuário a criar e publicar posts de texto no seu perfil pessoal do LinkedIn através do workflow local do projeto.
+- Preferir o workflow CLI do projeto em vez de chamadas HTTP avulsas.
 
-## Canonical Workflow For New Posts
+## Workflow Canônico Para Novos Posts
 
-1. Verify Zernio connectivity with `npm run linkedin:status`. If it fails, instruct the user to check Zernio config with `npx zernio status`.
-2. Create or update content as a local draft with `npm run linkedin:draft:create` or `npm run linkedin:draft:update`.
-5. If the post should have a link preview, create it as an article post by passing `--article-source`, `--article-title`, and `--article-description`.
-6. If the post should have a single image, pass `--image-path` and optional `--image-alt`.
-7. Review the draft with `npm run linkedin:draft:show` or `npm run linkedin:draft:list`.
-8. Prepare publication with `npm run linkedin:publish:prepare`.
-9. Always show the exact prepared content to the user and ask for explicit confirmation before publishing.
-10. Publish only after explicit user confirmation with `npm run linkedin:publish:confirm`.
-11. Verify the result with `npm run linkedin:history:list`.
+1. Verificar conectividade Zernio com `npm run linkedin:status`. Se falhar, instruir o usuário a verificar a configuração com `npx zernio status`.
+2. Criar ou atualizar conteúdo como rascunho local com `npm run linkedin:draft:create` ou `npm run linkedin:draft:update`.
+5. Se o post deve ter link preview, criar como article post passando `--article-source`, `--article-title` e `--article-description`.
+6. Se o post deve ter uma imagem, passar `--image-path` e opcionalmente `--image-alt`.
+7. Revisar o rascunho com `npm run linkedin:draft:show` ou `npm run linkedin:draft:list`.
+8. Preparar publicação com `npm run linkedin:publish:prepare`.
+9. Sempre mostrar o conteúdo preparado exato ao usuário e pedir confirmação explícita antes de publicar.
+10. Publicar somente após confirmação explícita do usuário com `npm run linkedin:publish:confirm`.
+11. Verificar o resultado com `npm run linkedin:history:list`.
 
-## Safety Rules
+## Regras de Segurança
 
-- Never publish directly through `POST /posts`; direct publish is intentionally disabled.
-- Never skip the `prepare` step.
-- Never run `publish:confirm` without explicit user approval for that exact prepared content.
-- Treat `npm run linkedin:history:list` as the source of truth for posts created by this tool.
-- For published post content and analytics, use `.local/linkedin/zernio-posts.json` (synced via `npm run linkedin:posts:sync`).
+- Nunca publicar diretamente via `POST /posts`; publicação direta está intencionalmente desabilitada.
+- Nunca pular o passo de `prepare`.
+- Nunca executar `publish:confirm` sem aprovação explícita do usuário para aquele conteúdo exato.
+- Tratar `npm run linkedin:history:list` como fonte da verdade para posts criados por esta ferramenta.
+- Para conteúdo e analytics de posts publicados, usar `.local/linkedin/zernio-posts.json` (sincronizado via `npm run linkedin:posts:sync`).
 
-## Zernio Backend
+## Backend Zernio
 
-- Publishing and analytics are handled by Zernio CLI (`npx zernio`).
-- Zernio config is stored at `~/.zernio/config.json`.
-- The project does not run a local server. All LinkedIn API interaction goes through Zernio.
-- If Zernio returns an auth or connectivity error, instruct the user to verify config with `npx zernio status`.
+- Publicação e analytics são gerenciados pelo Zernio CLI (`npx zernio`).
+- Configuração do Zernio está em `~/.zernio/config.json`.
+- O projeto não roda um servidor local. Toda interação com a API do LinkedIn passa pelo Zernio.
+- Se o Zernio retornar erro de auth ou conectividade, instruir o usuário a verificar a configuração com `npx zernio status`.
 
-## Preferred Commands
+## Comandos Preferenciais
 
 - `npm run linkedin:status`
 - `npm run linkedin:draft:create -- --content="..."`
@@ -50,33 +50,17 @@ This repository is a local LinkedIn posting assistant used from GitHub Copilot i
 - `npm run linkedin:mention:resolve -- --url="https://linkedin.com/in/..."`
 - `npm run linkedin:posts:sync`
 
-## Collaboration Guidance
+## Orientações de Colaboração
 
-- Communicate with the user in Portuguese by default unless the user asks for another language.
-- When the user asks for help writing a post, draft the content first.
-- Draft LinkedIn posts in Portuguese by default unless the user asks for another language.
-- Suggest edits on the draft before preparing publication.
-- Keep the user in control of the final publish decision.
-- For technical posts, keep the copy concise and practical. Prefer one concrete takeaway over a feature list.
-- If the user says the draft is too long or massante, tighten aggressively before suggesting new ideas.
-- Avoid reintroducing phrases the user explicitly rejected in the current conversation.
+- Comunicar com o usuário em português por padrão, salvo pedido de outro idioma.
+- O Post Editor pode auxiliar na criação e refinamento do texto, mas o usuário SEMPRE tem a decisão final.
+- Manter o usuário no controle da decisão final de publicação.
 
-## Agent Architecture
+## Arquitetura de Agentes
 
-This project uses specialist agents coordinated by a routing orchestrator. For LinkedIn post workflows, prefer the `LinkedIn Publishing Orchestrator` which delegates to:
+Este projeto usa um orquestrador + editor + draft manager. Para workflows de posts no LinkedIn, preferir o `LinkedIn Publishing Orchestrator` que delega para:
 
-| Agent | Role |
-|:------|:-----|
-| LinkedIn Topic Interviewer | Clarificação de tema, objetivo e ângulo |
-| LinkedIn Editorial Memory | Contexto histórico: temas cobertos, ângulos usados, gaps de conteúdo, cadência, performance |
-| reepl-linkedin | Geração de copy |
-| LinkedIn Post Critic | Revisão editorial |
-| LinkedIn Hook Optimizer | Avalia e otimiza hooks. Score, alternativas por tipo, análise de especificidade e tensão |
-| LinkedIn Voice Validator | Valida voz do autor: emojis, travessões, tom, filler corporativo, drift estilístico, voice fingerprint |
-| LinkedIn Fact Checker | Verifica claims factuais: dados numéricos, precisão técnica, atribuições, atualidade |
-| LinkedIn Performance Coach | Analisa performance histórica e recomenda formato, tamanho, tipo de hook e timing |
-| LinkedIn Format Strategist | Decisão de formato (text/article/image) |
-| LinkedIn Visual Briefing | Briefing visual e prompt de imagem |
-| LinkedIn Duplicate Guard | Verificação de duplicatas: similarity scoring, hook fingerprint, theme clustering, engagement-weighted recency |
-| LinkedIn Preview QA | Valida rendering: OG metadata, dimensões de imagem, limites de caracteres, integridade do draft |
+| Agente | Função |
+|:-------|:-------|
+| LinkedIn Post Editor | Colaborar na criação e refinamento do texto do post. |
 | LinkedIn Draft Manager | Operações CLI (draft, prepare, confirm) |
