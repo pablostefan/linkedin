@@ -207,9 +207,9 @@ describe("cli", () => {
   });
 
   describe("mention resolve", () => {
-    it("fails when --query is missing", async () => {
+    it("fails when --url is missing", async () => {
       const result = await runCli(["mention", "resolve"], { LOCAL_DATA_DIR: tempDir });
-      assert.equal(result.json?.error, "missing_query");
+      assert.equal(result.json?.error, "missing_url");
     });
   });
 });

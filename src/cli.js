@@ -281,9 +281,9 @@ async function main() {
     }
 
     if (domain === "mention" && action === "resolve") {
-      const query = resolveStringFlag(flags, "query") || positionals[0];
+      const query = resolveStringFlag(flags, "url") || positionals[0];
       if (!query) {
-        printJson({ error: "missing_query", message: "--query or positional argument is required." });
+        printJson({ error: "missing_url", message: "--url or positional argument is required." });
         process.exitCode = 1;
         return;
       }

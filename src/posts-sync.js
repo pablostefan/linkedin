@@ -1,8 +1,10 @@
 import childProcess from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const OUTPUT_PATH = path.resolve(".local/linkedin/zernio-posts.json");
+const currentDir = path.dirname(fileURLToPath(import.meta.url));
+const OUTPUT_PATH = path.resolve(currentDir, "../.local/linkedin/zernio-posts.json");
 const PAGE_SIZE = 100;
 
 function fetchPage(page) {
