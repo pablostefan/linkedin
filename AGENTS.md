@@ -4,14 +4,16 @@ Este repositório é um workflow local de publicação no LinkedIn para GitHub C
 
 ## Arquitetura
 
-O sistema gerencia o ciclo completo de posts no LinkedIn: pesquisa de tendências (Trend Researcher), criação de conteúdo (Post Editor), operações CLI (Draft Manager) e publicação via Zernio.
+O sistema gerencia o ciclo completo de posts no LinkedIn: planejamento (Post Planner), pesquisa de tendências (Trend Researcher), criação de conteúdo (Post Editor), crítica (Post Critic), operações CLI (Draft Manager) e publicação via Zernio.
 
 ## Agentes
 
 | Agente | Arquivo | Responsabilidade |
 |:-------|:--------|:-----------------|
-| LinkedIn Publishing Orchestrator | `.github/agents/linkedin-publishing-orchestrator.agent.md` | Ponto de entrada para publicar posts. Recebe conteúdo do usuário (ou delega criação ao Post Editor) e coordena o fluxo. |
+| LinkedIn Publishing Orchestrator | `.github/agents/linkedin-publishing-orchestrator.agent.md` | Ponto de entrada para publicar posts. Coordena o fluxo delegando para os agentes especialistas. |
+| LinkedIn Post Planner | `.github/agents/linkedin-post-planner.agent.md` | Planejar estratégia, estrutura, hook, CTA e formato do post antes da redação. |
 | LinkedIn Post Editor | `.github/agents/linkedin-post-editor.agent.md` | Colaborar interativamente com o usuário para criar ou refinar o texto do post. |
+| LinkedIn Post Critic | `.github/agents/linkedin-post-critic.agent.md` | Avaliar qualidade, engajamento, profundidade, tom e autenticidade do post. |
 | LinkedIn Trend Researcher | `.github/agents/linkedin-trend-researcher.agent.md` | Pesquisar posts de destaque no LinkedIn sobre um tema e usar como base para criar um novo post. |
 | LinkedIn Draft Manager | `.github/agents/linkedin-draft-manager.agent.md` | Executa operações CLI: criar/atualizar rascunho, prepare, confirm, history. |
 

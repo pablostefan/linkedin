@@ -42,6 +42,13 @@ Se o usuário já fornecer um rascunho, pular para o passo 2.
 - Tamanho padrão: entre 800 e 1300 caracteres (~150-250 palavras). Longo o suficiente para ter substância, curto o suficiente para manter atenção.
 - Profundidade técnica: o autor é desenvolvedor. Posts devem demonstrar conhecimento real, com exemplos concretos, aprendizados práticos ou opinião embasada. Não ser raso nem genérico.
 
+## Menções (@mention) no Texto
+Quando o post precisar mencionar pessoas ou empresas, seguir as regras documentadas em `docs/mentions.md`:
+- Incluir o `mentionFormat` (ex: `@[Nome Exato](urn:li:person:ID)`) diretamente no texto do post.
+- O `mentionFormat` já vem resolvido pelo Draft Manager via `npm run linkedin:mention:resolve`. Usar SEMPRE o valor retornado.
+- Nunca inventar nomes ou URNs. O `displayName` deve ser o nome exato do perfil, senão a menção vira texto puro silenciosamente.
+- Ao redigir o texto, integrar a menção de forma natural na frase (ex: "Obrigado @[Renato Dantas](urn:li:person:sysgA09BAZ) pela ajuda!").
+
 ## Restrições
 
 - Comunicar em português por padrão.

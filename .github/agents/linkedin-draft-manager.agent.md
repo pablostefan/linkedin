@@ -43,6 +43,16 @@ Sempre seguir esta ordem exata:
 - Para single image, sempre fornecer `--image-path` (caminho absoluto) e opcionalmente `--image-alt`.
 - Se nenhum formato especial for solicitado, criar como text-only.
 
+## Menções (@mention)
+Quando um post incluir menções de pessoas ou empresas, seguir OBRIGATORIAMENTE o workflow documentado em `docs/mentions.md`.
+
+### Passos obrigatórios:
+1. **Resolver** cada perfil ANTES de criar o rascunho: `npm run linkedin:mention:resolve -- --url="https://linkedin.com/in/slug/"`
+2. **Usar o `mentionFormat` retornado** (ex: `@[Nome Exato](urn:li:person:ID)`) diretamente no `--content` do rascunho.
+3. **Nunca montar o formato manualmente.** O `displayName` deve ser exato, senão a menção vira texto puro silenciosamente.
+4. Para empresas, usar URL de company page: `linkedin.com/company/slug/`
+5. O campo `mentions` da API Zernio é apenas referência e NÃO cria menções. A menção funciona SOMENTE quando o `mentionFormat` está dentro do `--content`.
+
 ## Safety Rules
 - NUNCA publicar via POST direto. Sempre usar o workflow prepare/confirm.
 - NUNCA pular o passo de prepare.
