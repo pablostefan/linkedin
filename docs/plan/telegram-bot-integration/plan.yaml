@@ -1,0 +1,332 @@
+plan_id: telegram-bot-integration
+objective: "Implementar bot do Telegram com IA para gerenciar workflow completo de posts no LinkedIn"
+planning_pass: 1
+
+context:
+  prd_path: docs/PRD.yaml
+  constraints:
+    - "Nao modificar arquivos existentes em src/*.js"
+    - "Implementar bot em src/bot/ com TypeScript"
+    - "Usar integracao direta com modulos existentes (import)"
+    - "Exigir confirmacao explicita antes de publicar"
+    - "Restringir acesso ao TELEGRAM_OWNER_CHAT_ID"
+  user_preferences:
+    - "Idioma padrao portugues"
+    - "Nao usar emojis no texto final de posts"
+    - "Nao usar travessao longo"
+
+artifacts:
+  plan_file: docs/plan/telegram-bot-integration/plan.yaml
+  target_directories:
+    - src/bot
+    - src/bot/middleware
+    - src/bot/conversations
+    - src/bot/handlers
+    - src/bot/services
+    - src/bot/state
+    - src/bot/utils
+
+tasks:
+  - task_id: T01
+    title: "Setup TypeScript e dependencias do bot"
+    description: "Adicionar infraestrutura TypeScript para o bot, scripts npm para build/run e dependencias grammy + conversations sem quebrar scripts atuais da CLI."
+    wave: 1
+    agent: gem-implementer
+    dependencies: []
+    acceptance_criteria:
+      - "tsconfig.json criado e compilando src/bot/**/*.ts para dist/bot"
+      - "Scripts npm adicionados: bot:dev, bot:build, bot:start"
+      - "Dependencias instaladas: grammy, @grammyjs/conversations, typescript, tsx"
+      - "Scripts existentes do LinkedIn permanecem inalterados"
+    files:
+      create:
+        - tsconfig.json
+      modify:
+        - package.json
+    complexity: medium
+    status: pending
+
+  - task_id: T02
+    title: "Criar modulo de configuracao do bot"
+    description: "Implementar src/bot/config.ts para carregar e validar TELEGRAM_BOT_TOKEN, TELEGRAM_OWNER_CHAT_ID e GITHUB_TOKEN, com erros claros de configuracao."
+    wave: 1
+    agent: gem-implementer
+    dependencies: [T01]
+    acceptance_criteria:
+      - "Falha rapida quando variaveis obrigatorias estao ausentes"
+      - "TELEGRAM_OWNER_CHAT_ID validado como numero/string normalizada"
+      - "Configuracao exportada com tipos explicitos"
+    files:
+      create:
+        - src/bot/config.ts
+    complexity: simple
+    status: pending
+
+  - task_id: T03
+    title: "Implementar middleware de autenticacao owner-only"
+    description: "Criar middleware que permite interacao apenas do chat autorizado e ignora silenciosamente outros chat_ids, com opcao de log interno minimo."
+    wave: 1
+    agent: gem-implementer
+    dependencies: [T02]
+    acceptance_criteria:
+      - "Mensagens de chat nao autorizado nao disparam handlers"
+      - "Mensagens do owner seguem o pipeline normalmente"
+      - "Middleware reutilizavel e tipado"
+    files:
+      create:
+        - src/bot/middleware/auth.ts
+    complexity: simple
+    status: pending
+
+  - task_id: T04
+    title: "Criar service LinkedIn wrapper"
+    description: "Implementar adapter tipado em src/bot/services/linkedin.ts que encapsula funcoes de src/local-state.js, src/zernio.js e src/config.js sem modificar esses arquivos."
+    wave: 1
+    agent: gem-implementer
+    dependencies: [T01]
+    acceptance_criteria:
+      - "Wrapper expoe metodos para draft create/list/show/update/delete"
+      - "Wrapper expoe fluxo publish prepare/confirm e history"
+      - "Suporta opcoes de post rico (image/article/schedule/mentions)"
+      - "Nenhuma alteracao em src/*.js"
+    files:
+      create:
+        - src/bot/services/linkedin.ts
+    complexity: complex
+    status: pending
+
+  - task_id: T05
+    title: "Criar entrypoint do bot com grammY"
+    description: "Implementar src/bot/index.ts com inicializacao do Bot, middleware chain (session, auth, conversations), registro de comandos e long-polling resiliente."
+    wave: 2
+    agent: gem-implementer
+    dependencies: [T02, T03, T04]
+    acceptance_criteria:
+      - "Bot inicia via long-polling sem webhook"
+      - "Middlewares registrados na ordem correta"
+      - "Tratamento global de erro com resposta segura ao usuario"
+      - "Graceful shutdown em SIGINT/SIGTERM"
+    files:
+      create:
+        - src/bot/index.ts
+    complexity: medium
+    status: pending
+
+  - task_id: T06
+    title: "Implementar handlers de comandos base"
+    description: "Criar comandos /start, /help, /drafts, /history, /status, /cancel com respostas claras e integracao com service LinkedIn."
+    wave: 2
+    agent: gem-implementer
+    dependencies: [T05]
+    acceptance_criteria:
+      - "Comandos listam dados reais de drafts/historico/status"
+      - "Mensagens formatadas para leitura no Telegram"
+      - "/cancel limpa estado de conversa ativa"
+    files:
+      create:
+        - src/bot/handlers/commands.ts
+        - src/bot/utils/format.ts
+    complexity: medium
+    status: pending
+
+  - task_id: T07
+    title: "Implementar estado de sessao conversacional"
+    description: "Definir tipos e estrutura de sessao para manter contexto de composicao, refinamento e publicacao durante conversas multi-mensagem."
+    wave: 2
+    agent: gem-implementer
+    dependencies: [T05]
+    acceptance_criteria:
+      - "Sessao contem draft em andamento e metadados de fluxo"
+      - "Reset de sessao em cancelamento e conclusao"
+      - "Tipos reutilizaveis para handlers e conversations"
+    files:
+      create:
+        - src/bot/state/session.ts
+    complexity: simple
+    status: pending
+
+  - task_id: T08
+    title: "Integrar GitHub Models API"
+    description: "Criar cliente IA em src/bot/services/ai.ts com chat completions OpenAI-compatible, contexto conversacional e system prompt de estilo para posts em portugues sem emoji e sem travessao longo."
+    wave: 3
+    agent: gem-implementer
+    dependencies: [T05, T07]
+    acceptance_criteria:
+      - "Chamadas para https://models.github.ai/inference/chat/completions funcionando"
+      - "Autenticacao via GITHUB_TOKEN"
+      - "System prompt inclui preferencias do usuario"
+      - "Fallback de erro amigavel quando API falhar"
+    files:
+      create:
+        - src/bot/services/ai.ts
+    complexity: complex
+    status: pending
+
+  - task_id: T09
+    title: "Implementar conversa de composicao"
+    description: "Criar conversation principal em src/bot/conversations/compose.ts para fluxo ideia -> refinamento IA -> iteracao -> confirmacao -> salvar draft, sempre exibindo texto final para aprovacao explicita."
+    wave: 3
+    agent: gem-implementer
+    dependencies: [T06, T07, T08]
+    acceptance_criteria:
+      - "Usuario consegue iterar refinamentos em multiplas mensagens"
+      - "Antes de salvar/publicar, texto final e mostrado e confirmado"
+      - "Draft salvo no estado local com metadados corretos"
+    files:
+      create:
+        - src/bot/conversations/compose.ts
+    complexity: complex
+    status: pending
+
+  - task_id: T10
+    title: "Implementar fluxo de publish com inline keyboard"
+    description: "Criar handlers para prepare -> preview -> confirm/cancel usando inline keyboard, acoplado ao mecanismo de publish intent existente."
+    wave: 4
+    agent: gem-implementer
+    dependencies: [T09]
+    acceptance_criteria:
+      - "Prepare gera confirmation-id valido"
+      - "Preview exibe conteudo exato antes de confirmar"
+      - "Confirm publica apenas apos acao explicita"
+      - "Cancel invalida intent pendente quando aplicavel"
+    files:
+      create:
+        - src/bot/handlers/publish.ts
+    complexity: medium
+    status: pending
+
+  - task_id: T11
+    title: "Implementar handler de imagem"
+    description: "Adicionar suporte para receber foto do Telegram, baixar arquivo com API do bot, persistir em caminho local seguro e associar ao draft atual."
+    wave: 4
+    agent: gem-implementer
+    dependencies: [T09]
+    acceptance_criteria:
+      - "Foto enviada vira arquivo local acessivel ao workflow"
+      - "Fluxo valida tamanho/tipo basico de arquivo"
+      - "Draft recebe imagePath e imageAlt opcional"
+    files:
+      create:
+        - src/bot/handlers/media.ts
+    complexity: medium
+    status: pending
+
+  - task_id: T12
+    title: "Implementar suporte a link preview"
+    description: "Extrair URL de mensagens, coletar campos de article (source/title/description) com ajuda do usuario e anexar ao draft respeitando exclusividade com imagem."
+    wave: 4
+    agent: gem-implementer
+    dependencies: [T09]
+    acceptance_criteria:
+      - "URL detectada e validada"
+      - "Campos article preenchidos e persistidos no draft"
+      - "Regras de exclusividade image vs article respeitadas"
+    files:
+      modify:
+        - src/bot/handlers/media.ts
+        - src/bot/conversations/compose.ts
+    complexity: medium
+    status: pending
+
+  - task_id: T13
+    title: "Implementar conversa de agendamento"
+    description: "Criar fluxo para capturar data/hora/timezone e converter para formato ISO 8601 usado pelo prepare de publicacao, com validacoes e confirmacao do usuario."
+    wave: 4
+    agent: gem-implementer
+    dependencies: [T10]
+    acceptance_criteria:
+      - "Usuario define scheduled-for valido"
+      - "Timezone IANA suportada, default UTC"
+      - "Informacao de agendamento aparece no preview e historico"
+    files:
+      create:
+        - src/bot/conversations/schedule.ts
+      modify:
+        - src/bot/handlers/publish.ts
+    complexity: medium
+    status: pending
+
+  - task_id: T14
+    title: "Adicionar testes do bot"
+    description: "Criar testes unitarios para services/config/auth e testes de integracao para handlers principais com mocks de Telegram API e GitHub Models API."
+    wave: 5
+    agent: gem-implementer
+    dependencies: [T08, T10, T11, T12, T13]
+    acceptance_criteria:
+      - "Cobertura minima dos fluxos criticos de draft e publish"
+      - "Testes de auth validam owner-only"
+      - "Testes de AI validam prompt e fallback"
+      - "npm test executa sem regressao dos testes existentes"
+    files:
+      create:
+        - test/bot/config.test.js
+        - test/bot/auth.test.js
+        - test/bot/services.ai.test.js
+        - test/bot/services.linkedin.test.js
+        - test/bot/handlers.publish.test.js
+    complexity: complex
+    status: pending
+
+  - task_id: T15
+    title: "Configurar deploy Railway"
+    description: "Adicionar configuracao de deploy com Dockerfile e railway.toml, incluindo volume para persistencia de .local/linkedin e comandos de start do bot."
+    wave: 5
+    agent: gem-implementer
+    dependencies: [T05, T14]
+    acceptance_criteria:
+      - "Build de container funcional para bot"
+      - "Start command executa bot em producao"
+      - "Documentado volume persistente para .local/linkedin"
+    files:
+      create:
+        - Dockerfile
+        - railway.toml
+    complexity: medium
+    status: pending
+
+  - task_id: T16
+    title: "Atualizar documentacao de uso"
+    description: "Atualizar README e docs com setup do bot Telegram, variaveis de ambiente, comandos, fluxo conversacional e checklist de seguranca/publicacao."
+    wave: 5
+    agent: gem-documentation-writer
+    dependencies: [T14, T15]
+    acceptance_criteria:
+      - "Guia local e Railway incluidos"
+      - "Fluxo prepare/confirm destacado com obrigatoriedade de confirmacao"
+      - "Secao de troubleshooting para auth/token/chat_id"
+    files:
+      modify:
+        - README.md
+      create:
+        - docs/telegram-bot.md
+    complexity: simple
+    status: pending
+
+milestones:
+  - wave: 1
+    goal: "Fundacao tecnica pronta"
+  - wave: 2
+    goal: "Bot operacional com comandos basicos"
+  - wave: 3
+    goal: "Fluxo conversacional com IA funcional"
+  - wave: 4
+    goal: "Publicacao rica (imagem/link/agendamento) completa"
+  - wave: 5
+    goal: "Qualidade, deploy e documentacao finalizados"
+
+plan_metrics:
+  total_tasks: 16
+  total_waves: 5
+  wave_1_task_count: 4
+  total_dependencies: 19
+  risk_score: medium
+
+status:
+  overall: pending_approval
+  completed_tasks: 0
+  blocked_tasks: []
+
+planning_history:
+  - pass: 1
+    summary: "Plano inicial criado com base no PRD e pesquisa tecnica"
+    timestamp: "2026-04-11T00:00:00Z"

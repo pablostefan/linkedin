@@ -1,6 +1,6 @@
 # AGENTES
 
-Este repositório é um workflow local de publicação no LinkedIn para GitHub Copilot no VS Code.
+Este repositório é um workflow local de publicação no LinkedIn para GitHub Copilot no VS Code e Codex.
 
 ## Arquitetura
 
@@ -16,6 +16,14 @@ O sistema gerencia o ciclo completo de posts no LinkedIn: planejamento (Post Pla
 | LinkedIn Post Critic | `.github/agents/linkedin-post-critic.agent.md` | Avaliar qualidade, engajamento, profundidade, tom e autenticidade do post. |
 | LinkedIn Trend Researcher | `.github/agents/linkedin-trend-researcher.agent.md` | Pesquisar posts de destaque no LinkedIn sobre um tema e usar como base para criar um novo post. |
 | LinkedIn Draft Manager | `.github/agents/linkedin-draft-manager.agent.md` | Executa operações CLI: criar/atualizar rascunho, prepare, confirm, history. |
+
+## Agente Codex
+
+O agente de projeto `linkedin_publishing_orchestrator`, definido em `.codex/agents/linkedin-publishing-orchestrator.toml`, é o ponto de entrada do Codex para criar, revisar, preparar ou publicar posts no LinkedIn.
+
+- Quando o agente principal do Codex receber um pedido desse fluxo, delegar ao `linkedin_publishing_orchestrator`.
+- O próprio `linkedin_publishing_orchestrator` não deve delegar novamente para si mesmo; ele coordena os especialistas e o Draft Manager.
+- Manter a confirmação explícita do usuário antes de qualquer `publish:confirm`.
 
 ## O Que os Agentes Devem Fazer
 

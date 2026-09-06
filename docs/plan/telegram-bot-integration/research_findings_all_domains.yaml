@@ -1,0 +1,770 @@
+plan_id: telegram-bot-integration
+objective: >
+  Pesquisa completa para construir bot Telegram Node.js/TypeScript integrado com
+  GitHub Models API para workflow de publicação LinkedIn. Abrange 5 áreas:
+  (1) comparação de libs Telegram, (2) GitHub Models API, (3) state management
+  para conversação, (4) file handling, (5) hosting. Resultado inclui UMA lib
+  recomendada e UMA opção de hospedagem com justificativa.
+focus_area: all_domains
+created_at: "2025-07-14"
+created_by: gem-researcher
+status: completed
+
+tldr: |
+  - grammY é a lib recomendada: TypeScript-first, conversations plugin nativo para state management,
+    InlineKeyboard fluent API, InputFile para uploads, ecossistema de plugins maduro.
+  - GitHub Models API é OpenAI-compatible (POST https://models.github.ai/inference/chat/completions),
+    autenticação via PAT com scope models, rate limits de 15 RPM / 150 RPD para modelos low-tier.
+  - Railway é a hospedagem recomendada: billing por segundo (~$1.94/mês para shared-cpu-1x 256MB),
+    persistent volumes $0.15/GB/mês, deploy via Git, ideal para bot single-user com long-polling.
+  - Módulos existentes (local-state.js, zernio.js) exportam funções puras importáveis diretamente
+    pelo bot TypeScript via ESM, sem necessidade de CLI spawn (conforme ADR-002).
+  - Conversação stateful usa grammY conversations plugin com estado tipado em TypeScript,
+    permitindo fluxo linear (onEnter → coleta → refinamento → confirmação) sem state machine manual.
+
+research_metadata:
+  methodology: >
+    Hybrid retrieval: semantic_search no codebase + read_file para módulos existentes;
+    Context7 resolve-library-id + query-docs para grammY, Telegraf, node-telegram-bot-api;
+    fetch_webpage para GitHub Models API (quickstart + prototyping docs), Railway, Render, Fly.io pricing.
+  scope: >
+    5 domínios: (1) Telegram bot libraries, (2) GitHub Models API, (3) conversation state management,
+    (4) file handling (photo upload/download), (5) hosting comparison.
+    Escopo restrito ao in_scope do PRD. Análise de 6 arquivos do projeto existente +
+    3 documentações de libs + 4 páginas de pricing + 2 páginas de API docs.
+  confidence: high
+  coverage: 95
+  decision_blockers: 0
+  research_blockers: 0
+
+# =============================================================================
+# DOMÍNIO 1: TELEGRAM BOT LIBRARY COMPARISON
+# =============================================================================
+
+files_analyzed:
+  - file: package.json
+    path: package.json
+    purpose: Manifesto do projeto — define ESM, Node >=18, scripts CLI
+    key_elements:
+      - element: type
+        type: variable
+        location: "package.json:4"
+        description: '"module" — projeto usa ESM nativo'
+      - element: engines.node
+        type: variable
+        location: "package.json:6"
+        description: '">=18" — garante suporte a fetch nativo e ESM'
+    language: json
+    lines: 28
+
+  - file: local-state.js
+    path: src/local-state.js
+    purpose: CRUD de rascunhos em JSON file, intents de publicação, histórico JSONL
+    key_elements:
+      - element: createLocalState
+        type: function
+        location: "src/local-state.js:174"
+        description: "Factory que retorna API de drafts (list, get, save, delete), publish intents e history"
+      - element: saveDraft
+        type: function
+        location: "src/local-state.js:257"
+        description: "Cria/atualiza draft com content + postOptions (article/image/mentions)"
+      - element: createPublishIntent
+        type: function
+        location: "src/local-state.js:340"
+        description: "Cria intent com TTL de 5 min, retorna confirmationId"
+      - element: normalizePostOptions
+        type: function
+        location: "src/local-state.js:88"
+        description: "Valida e normaliza article preview, image, mentions — mutual exclusion article vs image"
+    language: javascript
+    lines: 420
+
+  - file: zernio.js
+    path: src/zernio.js
+    purpose: Interface com Zernio CLI e API para publicação LinkedIn e resolução de menções
+    key_elements:
+      - element: publishPost
+        type: function
+        location: "src/zernio.js:95"
+        description: "Publica post via zernio CLI com suporte a scheduling, hashtags, tags, media"
+      - element: resolveApiKey
+        type: function
+        location: "src/zernio.js:33"
+        description: "Resolve API key de env var ou ~/.zernio/config.json"
+      - element: runZernioMentionResolve
+        type: function
+        location: "src/zernio.js:52"
+        description: "HTTP fetch para API Zernio de resolução de menções LinkedIn"
+    language: javascript
+    lines: 120
+
+  - file: config.js
+    path: src/config.js
+    purpose: Configuração de paths e constantes do projeto
+    key_elements:
+      - element: appConfig
+        type: variable
+        location: "src/config.js"
+        description: "Paths para draftsFilePath, publishIntentsFilePath, publishHistoryFilePath, localDataDir"
+    language: javascript
+    lines: 30
+
+  - file: cli.js
+    path: src/cli.js
+    purpose: Entry point CLI — importa config, local-state, zernio e roteia comandos
+    key_elements:
+      - element: main
+        type: function
+        location: "src/cli.js"
+        description: "Parseia args com parseArgs, roteia para draft/publish/history/analytics/mention subcomandos"
+    language: javascript
+    lines: 250
+
+  - file: PRD.yaml
+    path: docs/PRD.yaml
+    purpose: Product Requirements Document para integração Telegram bot
+    key_elements:
+      - element: scope.in_scope
+        type: variable
+        location: "docs/PRD.yaml:22"
+        description: "9 itens in-scope incluindo long-polling, conversação IA, rich posts, agendamento"
+      - element: decisions
+        type: variable
+        location: "docs/PRD.yaml:81"
+        description: "6 ADRs: TypeScript, import direto, GitHub Models, chat_id auth, long-polling, Railway"
+    language: yaml
+    lines: 140
+
+patterns_found:
+  - category: architecture
+    pattern: "Factory function com closure para state management"
+    description: >
+      local-state.js usa createLocalState(appConfig) que retorna objeto com métodos
+      (listDrafts, getDraft, saveDraft, etc.) operando sobre appConfig via closure.
+      Padrão funcional sem classes, compatível com import direto pelo bot.
+    examples:
+      - file: src/local-state.js
+        location: "src/local-state.js:174"
+        snippet: "export function createLocalState(appConfig) { ... return { listDrafts, getDraft, saveDraft, deleteDraft, ... } }"
+    prevalence: common
+
+  - category: architecture
+    pattern: "JSON file como store com atomic writes"
+    description: >
+      Drafts são persistidos em JSON file com escrita atômica (write temp → rename).
+      Backup automático após cada escrita. Bot precisa usar mesmo path via appConfig.
+    examples:
+      - file: src/local-state.js
+        location: "src/local-state.js:214"
+        snippet: "const tempFilePath = `${filePath}.${crypto.randomUUID()}.tmp`; await fs.writeFile(tempFilePath, ...); await fs.rename(tempFilePath, filePath);"
+    prevalence: common
+
+  - category: architecture
+    pattern: "Intent-based publish flow com TTL"
+    description: >
+      Publicação usa two-phase commit: createPublishIntent gera confirmationId com expiresAt (5 min),
+      confirmPublish valida e executa. Bot Telegram precisa replicar esse fluxo.
+    examples:
+      - file: src/local-state.js
+        location: "src/local-state.js:340"
+        snippet: "async function createPublishIntent({ draftId, content, postOptions, ... }) { ... expiresAt: new Date(now + 5 * 60 * 1000).toISOString() }"
+    prevalence: common
+
+  - category: error_handling
+    pattern: "Error codes com propriedade .code customizada"
+    description: >
+      Erros têm .code string (e.g. "invalid_draft_content", "zernio_cli_error")
+      para identificação programática. Bot deve capturar e traduzir para mensagens Telegram.
+    examples:
+      - file: src/local-state.js
+        location: "src/local-state.js:260"
+        snippet: 'error.code = "invalid_draft_content"'
+      - file: src/zernio.js
+        location: "src/zernio.js:12"
+        snippet: 'wrapped.code = "zernio_cli_error"'
+    prevalence: common
+
+  - category: naming
+    pattern: "camelCase para funções e variáveis, PascalCase para classes de erro"
+    description: "Convenção consistente em todo o codebase"
+    examples:
+      - file: src/local-state.js
+        location: "src/local-state.js:6"
+        snippet: "export class DraftStoreCorruptedError extends Error"
+    prevalence: common
+
+  - category: structure
+    pattern: "ESM com named exports"
+    description: >
+      Todos os módulos usam export function / export class (named exports).
+      Sem default exports. Bot TypeScript importará via: import { createLocalState } from './local-state.js'
+    examples:
+      - file: src/local-state.js
+        location: "src/local-state.js:174"
+        snippet: "export function createLocalState(appConfig)"
+      - file: src/zernio.js
+        location: "src/zernio.js:95"
+        snippet: "export async function publishPost({ content, accountId, options = {} })"
+    prevalence: common
+
+# =============================================================================
+# DOMÍNIO 1: TELEGRAM BOT LIBRARIES
+# =============================================================================
+
+related_architecture:
+  components_relevant_to_domain:
+    - component: "grammY (v1.x)"
+      responsibility: "Framework TypeScript-first para bots Telegram"
+      location: "npm: grammy"
+      relationship_to_domain: "Candidata principal — lib recomendada"
+
+    - component: "Telegraf (v4.x)"
+      responsibility: "Framework Node.js maduro para bots Telegram"
+      location: "npm: telegraf"
+      relationship_to_domain: "Alternativa madura"
+
+    - component: "node-telegram-bot-api"
+      responsibility: "Wrapper leve da API HTTP do Telegram"
+      location: "npm: node-telegram-bot-api"
+      relationship_to_domain: "Alternativa minimalista"
+
+  interfaces_used_by_domain:
+    - interface: "Telegram Bot API"
+      location: "https://core.telegram.org/bots/api"
+      usage_pattern: "Long-polling via getUpdates, sendMessage, sendPhoto, answerCallbackQuery"
+
+  data_flow_involving_domain: >
+    User → Telegram App → Telegram servers → Bot (long-polling getUpdates) →
+    Process message → Call local-state/zernio modules → Send response via Bot API
+
+  key_relationships_to_domain:
+    - from: "Telegram Bot"
+      to: "local-state.js"
+      relationship: "imports (createLocalState, saveDraft, createPublishIntent, confirmPublish)"
+    - from: "Telegram Bot"
+      to: "zernio.js"
+      relationship: "imports (publishPost, resolveApiKey)"
+    - from: "Telegram Bot"
+      to: "config.js"
+      relationship: "imports (appConfig para paths)"
+    - from: "Telegram Bot"
+      to: "GitHub Models API"
+      relationship: "HTTP POST para chat completions"
+
+related_technology_stack:
+  languages_used_in_domain:
+    - "TypeScript (bot novo, conforme ADR-001)"
+    - "JavaScript ESM (módulos existentes)"
+  frameworks_used_in_domain:
+    - name: "grammY"
+      usage_in_domain: >
+        RECOMENDADO. Framework principal do bot Telegram.
+        Long-polling via bot.start(). InlineKeyboard para confirmações.
+        Conversations plugin para fluxo stateful de criação/refinamento de posts.
+  libraries_used_in_domain:
+    - name: "grammy"
+      purpose_in_domain: "Core do bot — routing, middleware, long-polling"
+    - name: "@grammyjs/conversations"
+      purpose_in_domain: "Plugin para conversação stateful (fluxo linear de criação de post)"
+    - name: "@grammyjs/session"
+      purpose_in_domain: "Middleware de sessão para persistir estado entre mensagens"
+
+# =============================================================================
+# COMPARAÇÃO DETALHADA DAS 3 LIBS
+# =============================================================================
+
+telegram_library_comparison:
+  recommendation: "grammY"
+  justification: >
+    grammY é TypeScript-first (tipos nativos sem @types/*), tem conversations plugin
+    nativo para fluxos stateful (exatamente o que o bot precisa para refinamento de post com IA),
+    InlineKeyboard com fluent API, InputFile para uploads, e ecossistema de plugins.
+    Telegraf é madura mas menos TypeScript-friendly. node-telegram-bot-api é muito low-level
+    para o nível de state management requerido.
+
+  grammy:
+    npm_package: "grammy"
+    typescript: "Nativo — tipado desde o design, sem @types necessário"
+    long_polling: "bot.start() — inicia long-polling automaticamente"
+    inline_keyboard: >
+      new InlineKeyboard().text("Sim", "confirm_yes").text("Não", "confirm_no")
+      — fluent API com .row() para quebra de linha
+    callback_query: 'bot.callbackQuery("confirm_yes", async (ctx) => { ... })'
+    photo_upload: 'new InputFile("/path/to/photo.jpg") ou new InputFile(buffer)'
+    file_download: "await ctx.getFile() → file.download() ou construir URL com file_path"
+    session: '@grammyjs/session — bot.use(session({ initial: () => ({}) }))'
+    conversations: >
+      @grammyjs/conversations — plugin nativo para fluxos multi-step:
+      async function createPost(conversation, ctx) {
+        await ctx.reply("Qual o tema?");
+        const topic = await conversation.waitFor("message:text");
+        // ... refinar com IA ...
+        await ctx.reply("Confirma?", { reply_markup: keyboard });
+        const confirm = await conversation.waitForCallbackQuery(["yes","no"]);
+      }
+    graceful_shutdown: "bot.stop() — para long-polling gracefully"
+    error_handling: "bot.catch((err) => { ... })"
+    middleware: "Estilo express: bot.use(middleware)"
+    ecosystem: "Plugins: conversations, session, menu, router, i18n, hydrate, auto-retry"
+    maintenance: "Muito ativo — releases frequentes, docs atualizados"
+    external_state_access: >
+      Dentro de conversations, usar conversation.external(() => someAsyncCall())
+      para chamar APIs externas (GitHub Models, local-state) de forma safe.
+
+  telegraf:
+    npm_package: "telegraf"
+    typescript: "Suporte via @types/telegraf ou tipos embutidos (v4+), mas não TypeScript-first"
+    long_polling: "bot.launch() — inicia long-polling; process.once('SIGINT', () => bot.stop('SIGINT'))"
+    inline_keyboard: "Markup.inlineKeyboard([Markup.button.callback('Sim', 'confirm')])"
+    callback_query: "bot.action('confirm', async (ctx) => { ... })"
+    photo_upload: "ctx.replyWithPhoto(Input.fromLocalFile('/path/photo.jpg'))"
+    file_download: "bot.on(message('photo'), ctx => { ctx.telegram.getFileLink(fileId) })"
+    session: "Embutido: bot.use(session())"
+    conversations: "Sem plugin nativo — requer implementação manual de state machine"
+    graceful_shutdown: "Graceful via SIGINT/SIGTERM handlers fornecidos"
+    error_handling: "bot.catch((err, ctx) => { ... })"
+    middleware: "Estilo express: bot.use(middleware)"
+    ecosystem: "Maduro — session, stage, scenes (Wizard), rate-limit"
+    maintenance: "Ativo mas menos frequente que grammY"
+    notes: >
+      Telegraf Scenes/Wizard pode replicar conversations mas com more boilerplate.
+      Scenes usam enter/leave/on pattern, menos ergonômico que grammY conversations.
+
+  node_telegram_bot_api:
+    npm_package: "node-telegram-bot-api"
+    typescript: "Requer @types/node-telegram-bot-api — tipos comunitários"
+    long_polling: "new TelegramBot(token, { polling: true })"
+    inline_keyboard: >
+      Keyboard JSON manual: { reply_markup: { inline_keyboard: [[{ text: 'Sim', callback_data: 'yes' }]] } }
+    callback_query: "bot.on('callback_query', (query) => { ... })"
+    photo_upload: "bot.sendPhoto(chatId, '/path/photo.jpg')"
+    file_download: "bot.downloadFile(fileId, './downloads/')"
+    session: "Sem suporte nativo — implementação totalmente manual"
+    conversations: "Sem suporte — state management totalmente manual"
+    graceful_shutdown: "bot.stopPolling() — manual"
+    error_handling: "bot.on('polling_error', (error) => { ... })"
+    middleware: "Sem sistema de middleware — event listeners puros"
+    ecosystem: "Minimalista — poucas extensões"
+    maintenance: "Manutenção esporádica"
+    notes: >
+      Adequado para bots simples. Para o nível de state management e
+      conversação IA requerido pelo PRD, exigiria muito código custom.
+
+# =============================================================================
+# DOMÍNIO 2: GITHUB MODELS API
+# =============================================================================
+
+github_models_api:
+  endpoint: "https://models.github.ai/inference/chat/completions"
+  method: POST
+  format: "OpenAI-compatible chat completions"
+
+  authentication:
+    type: "Personal Access Token (PAT)"
+    scope: "models"
+    header: "Authorization: Bearer <GITHUB_PAT>"
+
+  headers:
+    - "Accept: application/vnd.github+json"
+    - "Authorization: Bearer <GITHUB_PAT>"
+    - "X-GitHub-Api-Version: 2022-11-28"
+    - "Content-Type: application/json"
+
+  request_format: |
+    {
+      "model": "openai/gpt-4.1",
+      "messages": [
+        { "role": "system", "content": "..." },
+        { "role": "user", "content": "..." }
+      ]
+    }
+
+  response_format: |
+    {
+      "choices": [
+        {
+          "message": {
+            "role": "assistant",
+            "content": "..."
+          }
+        }
+      ]
+    }
+
+  recommended_models:
+    primary: "openai/gpt-4.1"
+    rationale: >
+      Modelo high-tier com boa qualidade de texto. Alternativas: openai/gpt-4o (mais rápido),
+      openai/gpt-4.1-mini (menor, mais RPM se rate limit for problema).
+
+  rate_limits_copilot_pro:
+    low_tier_models:
+      requests_per_minute: 15
+      requests_per_day: 150
+      tokens_per_request_input: 8000
+      tokens_per_request_output: 4000
+      models: "gpt-4o-mini, gpt-4.1-nano, etc."
+    high_tier_models:
+      requests_per_minute: 10
+      requests_per_day: 50
+      tokens_per_request_input: 8000
+      tokens_per_request_output: 4000
+      models: "gpt-4o, gpt-4.1, gpt-4.1-mini, etc."
+    reasoning_models:
+      requests_per_minute: 2
+      requests_per_day: 12
+      models: "o1, o3-mini, o4-mini"
+
+  integration_notes: >
+    Para bot single-user, 50 RPD (high-tier) é suficiente para ~50 refinamentos/dia.
+    Usar openai/gpt-4.1 como padrão. Implementar retry com backoff para 429.
+    Mensagem de sistema deve instruir IA sobre estilo de post LinkedIn do usuário
+    (sem emojis, sem travessão longo, português, tom profissional).
+
+  code_example: |
+    async function chatWithModel(messages: ChatMessage[]): Promise<string> {
+      const response = await fetch("https://models.github.ai/inference/chat/completions", {
+        method: "POST",
+        headers: {
+          "Accept": "application/vnd.github+json",
+          "Authorization": `Bearer ${process.env.GITHUB_TOKEN}`,
+          "X-GitHub-Api-Version": "2022-11-28",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: "openai/gpt-4.1",
+          messages
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`GitHub Models API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data.choices[0].message.content;
+    }
+
+# =============================================================================
+# DOMÍNIO 3: CONVERSATION STATE MANAGEMENT
+# =============================================================================
+
+conversation_state_management:
+  approach: "grammY conversations plugin (@grammyjs/conversations)"
+  rationale: >
+    O plugin permite escrever fluxos multi-step como funções assíncronas lineares,
+    eliminando state machines manuais. Cada conversa tem estado tipado.
+    Ideal para o fluxo: ideia → refinamento com IA → preview → confirmação → publicação.
+
+  session_type_definition: |
+    interface SessionData {
+      conversationState: {
+        messages: Array<{ role: "user" | "assistant" | "system"; content: string }>;
+        currentDraftId: string | null;
+        pendingConfirmationId: string | null;
+      };
+    }
+
+  conversation_flow_pattern: |
+    async function refineDraft(conversation, ctx) {
+      // 1. Coletar ideia inicial
+      await ctx.reply("Qual o tema do post?");
+      const { message } = await conversation.waitFor("message:text");
+
+      // 2. Chamar GitHub Models para primeiro rascunho
+      const refined = await conversation.external(() =>
+        chatWithModel([
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: message.text }
+        ])
+      );
+      await ctx.reply(refined);
+
+      // 3. Loop de refinamento
+      while (true) {
+        await ctx.reply("Deseja ajustar algo ou salvar como rascunho?", {
+          reply_markup: new InlineKeyboard()
+            .text("Salvar rascunho", "save_draft")
+            .text("Continuar refinando", "refine_more")
+        });
+
+        const callback = await conversation.waitForCallbackQuery(["save_draft", "refine_more"]);
+
+        if (callback.match === "save_draft") break;
+
+        await ctx.reply("O que deseja mudar?");
+        const adjustment = await conversation.waitFor("message:text");
+        // ... chamar IA novamente com histórico ...
+      }
+
+      // 4. Salvar draft
+      const draft = await conversation.external(() =>
+        localState.saveDraft({ content: refined })
+      );
+      await ctx.reply(`Rascunho salvo: ${draft.draftId}`);
+    }
+
+  external_calls_pattern: >
+    conversation.external(() => asyncCall()) é obrigatório para chamar
+    APIs externas (GitHub Models, local-state, zernio) dentro de conversations.
+    Garante replay safety do plugin.
+
+  session_persistence: >
+    Para bot single-user local, session in-memory é suficiente.
+    Para Railway (processo persistent), session in-memory funciona entre restarts
+    (volume para dados, mas session de conversa pode ser ephemeral — conversas
+    longas devem ter checkpoint via draft salvo).
+
+# =============================================================================
+# DOMÍNIO 4: FILE HANDLING (PHOTO UPLOAD)
+# =============================================================================
+
+file_handling:
+  telegram_photo_flow: |
+    1. User envia foto no Telegram
+    2. Bot recebe update com message.photo (array de PhotoSize)
+    3. Bot pega file_id do maior tamanho: msg.photo[msg.photo.length - 1].file_id
+    4. Bot chama getFile(file_id) → retorna file_path
+    5. Bot baixa arquivo via URL: https://api.telegram.org/file/bot<token>/<file_path>
+    6. Bot salva em .local/linkedin/uploads/<uuid>.<ext>
+    7. Bot usa path local como --image-path no draft
+
+  grammy_implementation: |
+    bot.on("message:photo", async (ctx) => {
+      const photo = ctx.message.photo;
+      const largest = photo[photo.length - 1]; // maior resolução
+      const file = await ctx.api.getFile(largest.file_id);
+
+      // Download
+      const url = `https://api.telegram.org/file/bot${token}/${file.file_path}`;
+      const response = await fetch(url);
+      const buffer = Buffer.from(await response.arrayBuffer());
+
+      // Salvar
+      const ext = path.extname(file.file_path || ".jpg");
+      const localPath = path.join(uploadsDir, `${crypto.randomUUID()}${ext}`);
+      await fs.writeFile(localPath, buffer);
+
+      // Criar draft com imagem
+      const draft = await localState.saveDraft({
+        content: ctx.message.caption || "Post com imagem",
+        postOptions: { image: { path: localPath, altText: "" } }
+      });
+    });
+
+  link_preview_detection: >
+    Bot detecta URLs em mensagens de texto via regex.
+    Se URL detectada, extrai e usa como article source.
+    User pode adicionar título/descrição via conversa ou IA pode sugerir.
+
+  file_size_limits:
+    telegram_photo_max: "20 MB (via Bot API regular)"
+    telegram_download: "Automático via getFile + fetch"
+    linkedin_image_max: "Depende do Zernio — tipicamente 10 MB"
+
+# =============================================================================
+# DOMÍNIO 5: HOSTING COMPARISON
+# =============================================================================
+
+hosting_comparison:
+  recommendation: "Railway"
+  justification: >
+    Railway oferece billing por segundo com custo mínimo (~$1.94/mês para shared-cpu-1x 256MB
+    always-on), persistent volumes a $0.15/GB/mês para dados do bot (.local/ com drafts.json,
+    history, uploads), deploy automático via Git push, e variáveis de ambiente nativas.
+    Para bot single-user com long-polling que roda 24/7, Railway é a opção mais econômica
+    e simples. Hobby plan ($5/mês com $5 créditos) cobre o bot com folga.
+
+  railway:
+    pricing_model: "Usage-based, prorated por segundo"
+    plans:
+      free_trial: "$0/mês — 30 dias trial com $5 créditos, up to 1 vCPU/0.5GB RAM"
+      hobby: "$5/mês (inclui $5 créditos) — up to 48 vCPU/48GB RAM, single developer"
+      pro: "$20/mês (inclui $20 créditos) — up to 1TB storage, unlimited seats"
+    compute_costs:
+      cpu: "$0.00000772/vCPU/sec (~$20/mês para 1 vCPU full)"
+      memory: "$0.00000386/GB/sec (~$10/mês para 1GB full)"
+      smallest_always_on: "shared-cpu-1x 256MB ≈ $1.94/mês"
+    volumes: "$0.15/GB/mês — persistent storage para .local/ data"
+    estimated_monthly_cost: "$1.94 compute + $0.15 volume (1GB) = ~$2.09/mês (dentro do $5 credit do Hobby)"
+    deploy: "Git push → auto build → deploy"
+    env_vars: "Nativo — settings panel"
+    custom_domain: "2 domínios customizados no Hobby (não necessário para bot long-polling)"
+    cron_jobs: "Suportado"
+    docker: "Suportado"
+    regions: "Global — múltiplas regiões"
+    pros:
+      - "Billing por segundo — paga apenas pelo uso real"
+      - "$5 crédito no Hobby cobre bot com folga"
+      - "Persistent volumes para dados"
+      - "Deploy via Git push"
+      - "Variáveis de ambiente nativas"
+    cons:
+      - "$5/mês mínimo no Hobby plan"
+      - "Free trial dura apenas 30 dias"
+
+  render:
+    pricing_model: "Fixed-tier compute pricing"
+    plans:
+      hobby: "$0/mês per user + compute costs"
+      professional: "$19/mês per user + compute"
+    compute_tiers:
+      free: "$0/mês — 512MB RAM, 0.1 CPU (spins down após inatividade)"
+      starter: "$7/mês — 512MB RAM, 0.5 CPU"
+      standard: "$25/mês — 2GB RAM, 1 CPU"
+    background_workers: "Mesmos tiers que web services"
+    persistent_disks: "$0.25/GB/mês"
+    estimated_monthly_cost: "$7/mês (Starter) + $0.25 disk (1GB) = $7.25/mês"
+    deploy: "Git push → auto build → deploy"
+    env_vars: "Nativo"
+    cron_jobs: "Suportado"
+    docker: "Suportado"
+    pros:
+      - "Free tier disponível (mas spin down)"
+      - "Background Workers nativos"
+      - "Interface simples"
+    cons:
+      - "Free tier não serve para bot (spin down após 15 min de inatividade)"
+      - "Starter ($7/mês) mais caro que Railway para mesmo workload"
+      - "Fixed pricing — sem granularidade por segundo"
+
+  fly_io:
+    pricing_model: "Usage-based, prorated por segundo, Pay As You Go"
+    plans:
+      pay_as_you_go: "Sem plano mensal — paga apenas por recursos usados"
+      legacy_free: "Descontinuado para novos clientes (Outubro 2024)"
+    compute_costs:
+      shared_cpu_1x_256mb: "$1.94/mês (~$0.00000075/sec)"
+      shared_cpu_1x_512mb: "$3.19/mês"
+      shared_cpu_1x_1gb: "$5.70/mês"
+    volumes: "$0.15/GB/mês — mesmo que Railway"
+    volume_snapshots: "$0.08/GB/mês (first 10GB free)"
+    stopped_machines: "$0.15/GB/mês rootfs apenas"
+    estimated_monthly_cost: "$1.94 compute + $0.15 volume (1GB) = ~$2.09/mês"
+    deploy: "fly deploy (CLI) — Dockerfile-based"
+    env_vars: "fly secrets set — CLI-based"
+    custom_domain: "Suportado"
+    regions: "Global — 30+ regiões edge"
+    support: "Community (free), Standard ($29/mês), Premium ($199/mês)"
+    pros:
+      - "Custo similar a Railway (~$2/mês para smallest)"
+      - "30+ regiões globais"
+      - "Stopped machines cobram apenas rootfs"
+      - "Reservations com 40% desconto para uso previsível"
+    cons:
+      - "Free tier descontinuado — requer cartão desde o início"
+      - "Deploy via CLI (flyctl) é mais complexo que git push"
+      - "Sem free trial period"
+      - "Configuração mais complexa (fly.toml, flyctl setup)"
+      - "Support community apenas — Standard é $29/mês"
+
+  comparison_matrix:
+    headers: ["Critério", "Railway", "Render", "Fly.io"]
+    rows:
+      - ["Custo mínimo always-on", "~$2/mês", "$7/mês (Starter)", "~$2/mês"]
+      - ["Free tier útil", "30 dias trial", "Sim, mas spin down", "Não (descontinuado)"]
+      - ["Persistent volumes", "$0.15/GB/mês", "$0.25/GB/mês", "$0.15/GB/mês"]
+      - ["Deploy simplicity", "Git push ★★★", "Git push ★★★", "CLI (flyctl) ★★"]
+      - ["Env vars", "UI/CLI ★★★", "UI ★★★", "CLI only ★★"]
+      - ["Docker support", "Sim", "Sim", "Sim (required)"]
+      - ["Billing model", "Por segundo", "Fixed tier", "Por segundo"]
+      - ["Hobby plan cost", "$5/mês (inclui $5 credit)", "$0 (+ compute)", "N/A (Pay As You Go)"]
+      - ["Ideal para bot 24/7", "★★★", "★★", "★★★"]
+
+related_conventions:
+  naming_patterns_in_domain: "camelCase para funções/variáveis, PascalCase para classes/tipos TypeScript, UPPER_SNAKE para env vars"
+  structure_of_domain: >
+    Bot TypeScript em novo diretório (e.g. src/bot/) importando módulos existentes de src/.
+    Entry point separado do CLI (e.g. src/bot/index.ts).
+  error_handling_in_domain: "Error codes customizados (.code property) propagados como mensagens Telegram amigáveis"
+  testing_in_domain: "Node.js built-in test runner (node --test), sem framework externo. Testes em test/*.test.js"
+  documentation_in_domain: "PRD.yaml para requisitos, AGENTS.md para convenções, docs/ para documentação técnica"
+
+related_dependencies:
+  internal:
+    - component: local-state.js
+      relationship_to_domain: "Bot importa createLocalState para CRUD de drafts e publish intents"
+      direction: outbound
+    - component: zernio.js
+      relationship_to_domain: "Bot importa publishPost e resolveApiKey para publicação LinkedIn"
+      direction: outbound
+    - component: config.js
+      relationship_to_domain: "Bot importa appConfig para paths de arquivos locais"
+      direction: outbound
+  external:
+    - name: grammy
+      purpose_for_domain: "Core framework para bot Telegram com long-polling"
+    - name: "@grammyjs/conversations"
+      purpose_for_domain: "Plugin para conversação multi-step stateful"
+    - name: "@grammyjs/session"
+      purpose_for_domain: "Middleware para persistir estado entre mensagens"
+    - name: "typescript"
+      purpose_for_domain: "Compilador TypeScript (dev dependency)"
+
+domain_security_considerations:
+  sensitive_areas:
+    - area: "Telegram Bot Token"
+      location: "Variável de ambiente TELEGRAM_BOT_TOKEN"
+      concern: "Token dá acesso total ao bot — deve ser secret no hosting"
+    - area: "GitHub PAT"
+      location: "Variável de ambiente GITHUB_TOKEN"
+      concern: "PAT com scope models — acesso à API de IA"
+    - area: "Zernio API Key"
+      location: "~/.zernio/config.json ou env var ZERNIO_API_KEY"
+      concern: "Acesso à API de publicação LinkedIn"
+    - area: "Owner Chat ID"
+      location: "Variável de ambiente TELEGRAM_OWNER_CHAT_ID"
+      concern: "Identifica o dono — mensagens de outros chat_ids devem ser ignoradas silenciosamente"
+  authentication_patterns_in_domain: >
+    Middleware de autenticação como primeiro handler:
+    bot.use(async (ctx, next) => {
+      if (String(ctx.chat?.id) !== process.env.TELEGRAM_OWNER_CHAT_ID) return;
+      await next();
+    });
+  authorization_patterns_in_domain: "Single-user — qualquer mensagem do dono é autorizada"
+  data_validation_in_domain: >
+    local-state.js já valida conteúdo (non-empty, postOptions normalized).
+    Bot deve sanitizar input do Telegram antes de passar para módulos existentes.
+
+testing_patterns:
+  framework: "Node.js built-in test runner (node:test)"
+  coverage_areas:
+    - "cli.test.js — testes do CLI entry point"
+    - "config.test.js — testes de configuração"
+    - "local-state.test.js — testes de CRUD de drafts e publish intents"
+    - "zernio.test.js — testes de integração com Zernio CLI"
+  test_organization: "Arquivos test/*.test.js correspondendo a src/*.js"
+  mock_patterns:
+    - "Mocking de fs para testes de local-state (readFile, writeFile)"
+    - "Mocking de childProcess.execFile para testes de zernio"
+
+open_questions:
+  - question: "Qual modelo exato do GitHub Models usar como padrão (gpt-4.1 vs gpt-4o)?"
+    context: "gpt-4.1 tem melhor qualidade mas 50 RPD; gpt-4o é mais rápido mas mesmo limite. Para bot single-user, ambos cobrem."
+    type: nice_to_know
+    affects: ["conversacao-ia"]
+
+  - question: "Manter conversação IA inteira em memória ou persistir mensagens em arquivo?"
+    context: >
+      grammY conversations plugin mantém estado em memória.
+      Se o processo reiniciar, a conversa em andamento se perde.
+      Para single-user, isso é aceitável se drafts são salvos frequentemente.
+    type: nice_to_know
+    affects: ["state-management"]
+
+gaps:
+  - area: "Telegram Bot API file download via grammY"
+    description: >
+      A documentação do grammY não detalha explicitamente o helper de download de arquivos.
+      O padrão geral (getFile → construir URL → fetch) é documentado na API do Telegram e funciona,
+      mas pode existir um helper nativo no grammY que simplifica.
+    impact: nice_to_know
+    affects: ["rich-posts"]
+
+  - area: "Railway volume mount path para .local/"
+    description: >
+      Precisa confirmar o formato exato de configuração de volume mount no Railway
+      para mapear o volume persistente ao diretório .local/linkedin/ usado pelos módulos.
+    impact: nice_to_know
+    affects: ["hosting"]

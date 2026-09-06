@@ -1,0 +1,128 @@
+prd_id: telegram-bot-integration
+version: "1.0.0"
+
+user_stories:
+  - as_a: "criador de conteúdo LinkedIn"
+    i_want: "enviar mensagens pelo Telegram para criar e publicar posts"
+    so_that: "eu possa publicar de qualquer lugar sem precisar abrir o VS Code"
+
+  - as_a: "criador de conteúdo LinkedIn"
+    i_want: "conversar com uma IA pelo Telegram para refinar o texto do meu post"
+    so_that: "o conteúdo fique mais polido e com melhor engajamento"
+
+  - as_a: "criador de conteúdo LinkedIn"
+    i_want: "enviar fotos e links pelo Telegram para posts com mídia"
+    so_that: "eu possa criar posts ricos sem precisar de CLI"
+
+  - as_a: "criador de conteúdo LinkedIn"
+    i_want: "agendar posts para publicação futura pelo Telegram"
+    so_that: "eu possa preparar conteúdo com antecedência"
+
+scope:
+  in_scope:
+    - "Bot Telegram com long-polling (Node.js/TypeScript)"
+    - "Conversação stateful com IA via GitHub Models API"
+    - "Workflow completo: criar/listar/editar rascunhos, preparar, confirmar, histórico"
+    - "Suporte a posts com imagem (upload de foto no Telegram)"
+    - "Suporte a posts com link preview (article source/title/description)"
+    - "Agendamento de posts com data/hora e timezone"
+    - "Segurança: restrito ao chat_id do dono"
+    - "Integração direta com módulos existentes (local-state, zernio, config)"
+    - "Recomendação de hospedagem"
+
+  out_of_scope:
+    - "Interface web ou dashboard"
+    - "Suporte multi-usuário (apenas dono)"
+    - "Carrossel de imagens (múltiplas imagens por post)"
+    - "Analytics detalhados pelo Telegram (apenas overview)"
+    - "Edição de posts já publicados"
+    - "Webhook mode (MVP usa long-polling)"
+
+acceptance_criteria:
+  - criterion: "Bot responde a mensagens no Telegram do dono"
+    verification: "Enviar /start e receber resposta de boas-vindas"
+  - criterion: "Conversação com IA refina texto do post"
+    verification: "Enviar ideia de post e receber texto refinado iterativamente"
+  - criterion: "Criar rascunho via Telegram"
+    verification: "Texto confirmado cria draft em .local/linkedin/drafts.json"
+  - criterion: "Publicar via Telegram com confirmação"
+    verification: "Fluxo prepare → confirm funciona e post aparece no LinkedIn"
+  - criterion: "Enviar foto no Telegram vira post com imagem"
+    verification: "Foto enviada é baixada, salva e usada como --image-path"
+  - criterion: "Enviar link vira post com article preview"
+    verification: "Link é extraído e usado como --article-source"
+  - criterion: "Agendar post pelo Telegram"
+    verification: "Post agendado aparece no histórico com scheduledFor"
+  - criterion: "Mensagens de não-dono são rejeitadas silenciosamente"
+    verification: "Outro user_id não recebe resposta"
+  - criterion: "Bot mantém contexto da conversa"
+    verification: "Múltiplas mensagens refinam o mesmo post sem repetir contexto"
+
+needs_clarification: []
+
+features:
+  - name: "Telegram Bot Core"
+    overview: "Bot com long-polling, autenticação por chat_id, roteamento de comandos e mensagens"
+    status: planned
+  - name: "Conversação com IA"
+    overview: "GitHub Models API para refinamento interativo de texto de posts"
+    status: planned
+  - name: "Draft Management via Telegram"
+    overview: "Criar, listar, editar, deletar rascunhos por comandos ou conversa"
+    status: planned
+  - name: "Publicação via Telegram"
+    overview: "Prepare + confirm com preview do texto e confirmação inline keyboard"
+    status: planned
+  - name: "Rich Posts"
+    overview: "Suporte a imagem (upload) e link preview (article) via Telegram"
+    status: planned
+  - name: "Agendamento"
+    overview: "Agendar posts com data/hora/timezone pelo Telegram"
+    status: planned
+
+decisions:
+  - id: ADR-001
+    status: accepted
+    decision: "Usar Node.js com TypeScript para manter consistência com projeto existente"
+    rationale: "O projeto atual é Node.js puro; TypeScript adiciona type safety para o bot"
+    alternatives: ["Python (python-telegram-bot)", "Deno"]
+    consequences: ["Precisa de tsconfig e build step", "Compartilha dependências com projeto existente"]
+
+  - id: ADR-002
+    status: accepted
+    decision: "Importar módulos existentes (local-state, zernio) diretamente ao invés de chamar CLI"
+    rationale: "Evita overhead de spawn, melhor error handling, acesso direto aos tipos"
+    alternatives: ["Shell out para npm run linkedin:*", "API HTTP intermediária"]
+    consequences: ["Acoplamento direto", "Precisa garantir compatibilidade de paths"]
+
+  - id: ADR-003
+    status: accepted
+    decision: "Usar GitHub Models API para IA conversacional"
+    rationale: "Usuário tem Copilot, GitHub Models é gratuito com Copilot subscription"
+    alternatives: ["OpenAI API direta", "Anthropic API", "Sem IA"]
+    consequences: ["Dependência do token GitHub", "Rate limits do GitHub Models"]
+
+  - id: ADR-004
+    status: accepted
+    decision: "Segurança via chat_id fixo em variável de ambiente"
+    rationale: "Bot pessoal, single-user, chat_id é imutável e seguro"
+    alternatives: ["Password/PIN", "OAuth", "Lista de IDs em config"]
+    consequences: ["Precisa descobrir chat_id previamente", "Sem suporte multi-user"]
+
+  - id: ADR-005
+    status: accepted
+    decision: "Long-polling ao invés de webhook para MVP"
+    rationale: "Mais simples, funciona local e em cloud, sem necessidade de domínio/SSL"
+    alternatives: ["Webhook (requer URL pública)", "Hybrid"]
+    consequences: ["Ligeiramente mais latência", "Precisa de processo always-on"]
+
+  - id: ADR-006
+    status: proposed
+    decision: "Hospedar em Railway para deploy sempre-online"
+    rationale: "Free tier generoso, deploy fácil via Git, suporta long-polling, variáveis de ambiente simples"
+    alternatives: ["Fly.io", "Render", "Local-only", "VPS"]
+    consequences: ["~$5/mês após free tier", "Precisa de volume para .local/ data"]
+
+changes:
+  - version: "1.0.0"
+    change: "PRD inicial criado a partir da fase de discussão"
